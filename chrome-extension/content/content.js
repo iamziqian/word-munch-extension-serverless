@@ -13,6 +13,13 @@ let lastWordResult = null;
 let lastWordText = null;
 let lastResultTime = 0;
 
+// 扩展设置状态
+let extensionSettings = {
+    extensionEnabled: true,
+    outputLanguage: 'english',
+    notificationsEnabled: true
+};
+
 // 新增：请求管理变量
 let currentRequestId = null;
 let requestTimeout = null;
@@ -47,6 +54,12 @@ function handleTextSelection(event) {
     const selectedText = selection.toString().trim();
     
     console.log('Word Munch: 文本选择事件触发，选中文本:', selectedText);
+    
+    // 检查扩展是否被禁用
+    if (!extensionSettings.extensionEnabled) {
+        console.log('Word Munch: 扩展已禁用，跳过处理');
+        return;
+    }
     
     // 检查选中的文本是否为空
     if (!selectedText || selectedText.length === 0) {
@@ -372,6 +385,13 @@ function closeFloatingWidget() {
 
 // 开始简化
 function startSimplification(text, type) {
+    // 再次检查扩展是否启用
+    if (!extensionSettings.extensionEnabled) {
+        console.log('Word Munch: 扩展已禁用，取消简化请求');
+        showSimplificationError('扩展已禁用');
+        return;
+    }
+    
     const context = currentSelection ? getContextAroundSelection(currentSelection.selection) : '';
     
     console.log('Word Munch: 开始简化:', text, type);
@@ -743,9 +763,12 @@ function handleSimplifyError(word, error) {
 function handleSettingsUpdated(settings) {
     console.log('Word Munch: 设置已更新:', settings);
     
-    // 如果扩展被禁用，隐藏浮动窗口
-    if (!settings.extensionEnabled) {
-        console.log('Word Munch: 扩展已禁用');
+    // 更新本地设置状态
+    extensionSettings = { ...extensionSettings, ...settings };
+    
+    // 如果扩展被禁用，立即关闭浮动窗口
+    if (!extensionSettings.extensionEnabled) {
+        console.log('Word Munch: 扩展已禁用，关闭浮动窗口');
         closeFloatingWidget();
     }
 }
