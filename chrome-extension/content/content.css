@@ -1,6 +1,276 @@
-/* Content Script 样式文件 */
+/* Content Script 样式文件 - 极简版 */
 
-/* 为将来可能添加的页面内元素预留样式 */
+/* === 浮动窗口样式 === */
+.word-munch-floating-widget {
+    position: fixed;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 10000;
+    min-width: 180px;
+    max-width: 280px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.word-munch-floating-widget.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* 窗口头部 - 极简化 */
+.wm-header {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.wm-header-text {
+    font-size: 12px;
+    color: #666;
+    word-break: break-word;
+    flex: 1;
+    margin-right: 8px;
+}
+
+.wm-close-btn {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    color: #666;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.wm-close-btn:hover {
+    background-color: #e9ecef;
+}
+
+/* 窗口内容 */
+.wm-content {
+    padding: 12px;
+}
+
+/* 加载状态 */
+.wm-loading {
+    text-align: center;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.wm-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 结果区域 - 极简化 */
+.wm-result {
+    display: none;
+}
+
+.wm-result.show {
+    display: block;
+}
+
+/* 移除结果标题 */
+.wm-result-header {
+    display: none;
+}
+
+.wm-synonym {
+    background: #f0f4ff;
+    padding: 12px;
+    border-radius: 6px;
+    color: #1a56db;
+    font-weight: 500;
+    border-left: 3px solid #667eea;
+    margin-bottom: 12px;
+    word-break: break-word;
+    text-align: center;
+    font-size: 15px;
+}
+
+/* 按钮区域 - 使用符号 */
+.wm-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.wm-btn {
+    border: none;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 换一个按钮 - ChatGPT风格的刷新图标 */
+.wm-btn-primary {
+    background: #667eea;
+    color: white;
+    position: relative;
+}
+
+.wm-btn-primary:hover:not(:disabled) {
+    background: #5a6fd8;
+}
+
+/* 使用CSS绘制圆形刷新箭头 */
+.wm-btn-primary::before {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    border-top-color: transparent;
+    border-right-color: transparent;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.wm-btn-primary::after {
+    content: "";
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid currentColor;
+    top: 50%;
+    left: 50%;
+    transform: translate(-30%, -70%) rotate(45deg);
+}
+
+/* 复制按钮 - 统一紫色主题 */
+.wm-btn-secondary {
+    background: #667eea;
+    color: white;
+    border: 1px solid #667eea;
+    position: relative;
+}
+
+.wm-btn-secondary:hover {
+    background: #5a6fd8;
+    border-color: #5a6fd8;
+}
+
+/* 使用CSS绘制双层方框复制图标 */
+.wm-btn-secondary::before {
+    content: "";
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-40%, -40%);
+}
+
+.wm-btn-secondary::after {
+    content: "";
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-60%, -60%);
+    background: #667eea;
+}
+
+.wm-btn-secondary:hover::after {
+    background: #5a6fd8;
+}
+
+.wm-btn-secondary.success {
+    background: #28a745;
+    color: white;
+    border: 1px solid #28a745;
+}
+
+.wm-btn-secondary.success::before,
+.wm-btn-secondary.success::after {
+    display: none;
+}
+
+.wm-btn-secondary.success::before {
+    content: "✓";
+    display: block;
+    position: static;
+    transform: none;
+    width: auto;
+    height: auto;
+    border: none;
+    border-radius: 0;
+    font-size: 14px;
+    background: transparent;
+}
+
+/* 错误状态 */
+.wm-error {
+    display: none;
+    color: #dc3545;
+    text-align: center;
+    font-size: 12px;
+    padding: 8px;
+    background: #f8d7da;
+    border-radius: 6px;
+    border: 1px solid #f5c6cb;
+}
+
+.wm-error.show {
+    display: block;
+}
+
+/* === 原有样式（为将来功能预留） === */
 .word-munch-highlight {
     background-color: rgba(102, 126, 234, 0.2);
     border-bottom: 2px solid #667eea;
@@ -50,4 +320,33 @@
 
 .word-munch-container * {
     pointer-events: auto;
-} 
+}
+
+/* Toast 消息样式 */
+.word-munch-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4caf50;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: Arial, sans-serif;
+    z-index: 10001;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    max-width: 300px;
+    word-wrap: break-word;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.word-munch-toast.error {
+    background: #f44336;
+}
+
+.word-munch-toast.show {
+    opacity: 1;
+    transform: translateX(0);
+}
