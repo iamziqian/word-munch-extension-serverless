@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Munch 控制面板</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">Word Munch</h1>
+            <p class="subtitle">智能词汇简化</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- 扩展开关 -->
+            <div class="control-section">
+                <div class="control-item">
+                    <label class="control-label">扩展状态</label>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="extension-toggle" checked>
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 语言设置 -->
+            <div class="control-section">
+                <h3 class="section-title">输出语言</h3>
+                <select id="output-language" class="language-select">
+                    <option value="english">English</option>
+                    <option value="spanish">Español</option>
+                    <option value="chinese">中文</option>
+                    <option value="japanese">日本語</option>
+                    <option value="korean">한국어</option>
+                </select>
+            </div>
+            
+            <!-- 用户登录状态 -->
+            <!-- <div class="control-section" id="user-section">
+                <h3 class="section-title">用户状态</h3>
+                <div id="login-form" class="login-form">
+                    <input type="email" id="email-input" placeholder="邮箱地址" class="input-field">
+                    <input type="password" id="password-input" placeholder="密码" class="input-field">
+                    <div class="login-buttons">
+                        <button id="login-btn" class="btn btn-primary">登录</button>
+                        <button id="register-btn" class="btn btn-secondary">注册</button>
+                    </div>
+                </div>
+                <div id="user-info" class="user-info" style="display: none;">
+                    <div class="user-avatar">
+                        <span id="user-avatar-text">U</span>
+                    </div>
+                    <div class="user-details">
+                        <div id="user-email" class="user-email">user@example.com</div>
+                        <button id="logout-btn" class="btn btn-small">退出登录</button>
+                    </div>
+                </div>
+            </div> -->
+            
+            <!-- 统计信息 -->
+            <div class="control-section">
+                <h3 class="section-title">使用统计</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-number" id="today-count">0</div>
+                        <div class="stat-label">今日划词</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="week-count">0</div>
+                        <div class="stat-label">本周划词</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="total-count">0</div>
+                        <div class="stat-label">总划词数</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <div class="status" id="status">扩展已启用</div>
+        </footer>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
