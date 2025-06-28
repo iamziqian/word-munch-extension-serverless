@@ -13,6 +13,29 @@ let lastWordResult = null;
 let lastWordText = null;
 let lastResultTime = 0;
 
+// 新增：请求管理变量
+let currentRequestId = null;
+let requestTimeout = null;
+let pendingSelection = null; // 用于存储待处理的选择
+
+// 取消当前请求
+function cancelCurrentRequest() {
+    console.log('Word Munch: 取消当前请求');
+    
+    // 清除超时
+    if (requestTimeout) {
+        clearTimeout(requestTimeout);
+        requestTimeout = null;
+        console.log('Word Munch: 已清除请求超时');
+    }
+    
+    // 标记当前请求为无效
+    if (currentRequestId) {
+        console.log('Word Munch: 标记请求为无效:', currentRequestId);
+        currentRequestId = null;
+    }
+}
+
 // 监听文本选择事件
 document.addEventListener('mouseup', handleTextSelection);
 document.addEventListener('keyup', handleTextSelection);
@@ -23,9 +46,11 @@ function handleTextSelection(event) {
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
     
+    console.log('Word Munch: 文本选择事件触发，选中文本:', selectedText);
+    
     // 检查选中的文本是否为空
     if (!selectedText || selectedText.length === 0) {
-        hideFloatingWidget();
+        closeFloatingWidget();
         return;
     }
     
@@ -35,24 +60,54 @@ function handleTextSelection(event) {
         return;
     }
 
-    // 保存当前选择
-    currentSelection = {
+    console.log('Word Munch: 处理新的文本选择:', selectedText);
+    
+    // 创建新的选择对象
+    const newSelection = {
         text: selectedText,
         selection: selection,
-        range: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
+        range: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null,
+        timestamp: Date.now()
     };
     
-    console.log('Word Munch: 新的文本选择:', selectedText);
+    // 如果当前有正在处理的请求，标记为待处理
+    if (currentRequestId) {
+        console.log('Word Munch: 有正在处理的请求，标记新选择为待处理');
+        pendingSelection = newSelection;
+        return;
+    }
+    
+    // 立即处理新选择
+    processTextSelection(newSelection);
+}
+
+// 处理文本选择的核心逻辑
+function processTextSelection(selectionData) {
+    const { text, selection, range } = selectionData;
+    
+    console.log('Word Munch: 开始处理文本选择:', text);
+    
+    // 取消之前的请求
+    cancelCurrentRequest();
+    
+    // 保存当前选择
+    currentSelection = {
+        text: text,
+        selection: selection,
+        range: range
+    };
+    
+    console.log('Word Munch: 新的文本选择:', text);
     
     // 根据文本长度决定处理方式
-    if (isValidWord(selectedText)) {
+    if (isValidWord(text)) {
         // 词汇简化（1-10个字符）
-        showFloatingWidget(selectedText, selection, 'word');
-    } else if (isValidSentence(selectedText)) {
+        showFloatingWidget(text, selection, 'word');
+    } else if (isValidSentence(text)) {
         // 句子/段落简化（11-500个字符）
-        showFloatingWidget(selectedText, selection, 'sentence');
+        showFloatingWidget(text, selection, 'sentence');
     } else {
-        hideFloatingWidget();
+        closeFloatingWidget();
     }
 }
 
@@ -60,17 +115,35 @@ function handleTextSelection(event) {
 function showFloatingWidget(text, selection, type) {
     console.log('Word Munch: 显示浮动窗口:', text, type);
     
-    // 先保存当前选择，避免在hideFloatingWidget中被重置
+    // 先保存当前选择，避免在cleanupPreviousWidget中被重置
     const newSelection = {
         text: text,
         selection: selection,
         range: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
     };
     
-    // 移除现有的浮动窗口和事件监听器
-    hideFloatingWidget();
+    // 取消当前请求
+function cancelCurrentRequest() {
+    console.log('Word Munch: 取消当前请求');
     
-    // 重新设置选择状态（在hideFloatingWidget之后）
+    // 清除超时
+    if (requestTimeout) {
+        clearTimeout(requestTimeout);
+        requestTimeout = null;
+        console.log('Word Munch: 已清除请求超时');
+    }
+    
+    // 标记当前请求为无效
+    if (currentRequestId) {
+        console.log('Word Munch: 标记请求为无效:', currentRequestId);
+        currentRequestId = null;
+    }
+}
+
+// 清理之前的浮动窗口（但不重置选择状态）
+    cleanupPreviousWidget();
+    
+    // 重新设置选择状态（在cleanupPreviousWidget之后）
     currentSelection = newSelection;
     console.log('Word Munch: 设置当前选择:', currentSelection.text);
     
@@ -131,8 +204,10 @@ function showFloatingWidget(text, selection, type) {
     
     // 触发显示动画
     setTimeout(() => {
-        floatingWidget.classList.add('show');
-        console.log('Word Munch: 触发显示动画');
+        if (floatingWidget) { // 确保窗口还存在
+            floatingWidget.classList.add('show');
+            console.log('Word Munch: 触发显示动画');
+        }
     }, 10);
     
     // 绑定事件
@@ -140,6 +215,33 @@ function showFloatingWidget(text, selection, type) {
     
     // 自动开始简化
     startSimplification(text, type);
+}
+
+// 清理之前的浮动窗口（但不重置选择状态）
+function cleanupPreviousWidget() {
+    console.log('Word Munch: 清理之前的浮动窗口');
+    
+    // 取消当前请求
+    cancelCurrentRequest();
+    
+    // 移除外部点击监听器
+    removeOutsideClickListener();
+    
+    // 移除现有的浮动窗口
+    if (floatingWidget) {
+        floatingWidget.classList.remove('show');
+        
+        // 立即移除，不等待动画
+        if (floatingWidget.parentNode) {
+            floatingWidget.parentNode.removeChild(floatingWidget);
+        }
+        floatingWidget = null;
+        console.log('Word Munch: 之前的浮动窗口已清理');
+    }
+    
+    // 重置结果相关状态，但保留选择状态
+    currentResult = null;
+    currentSynonymIndex = 0;
 }
 
 // 设置浮动窗口事件
@@ -150,14 +252,14 @@ function setupWidgetEvents(text, type) {
     // 关闭按钮
     const closeBtn = widget.querySelector('.wm-close-btn');
     if (closeBtn) {
-        closeBtn.addEventListener('click', closeFloatingWidget); // 使用完全清理函数
+        closeBtn.addEventListener('click', closeFloatingWidget);
     }
     
     // 换一个按钮
     const simplifyBtn = widget.querySelector('.wm-simplify-btn');
     if (simplifyBtn) {
         simplifyBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 防止事件冒泡
+            e.stopPropagation();
             showNextSynonym();
         });
     }
@@ -166,7 +268,7 @@ function setupWidgetEvents(text, type) {
     const copyBtn = widget.querySelector('.wm-copy-btn');
     if (copyBtn) {
         copyBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 防止事件冒泡
+            e.stopPropagation();
             copySynonymToClipboard();
         });
     }
@@ -183,7 +285,7 @@ function setupWidgetEvents(text, type) {
 // 添加外部点击监听器
 function addOutsideClickListener() {
     if (!outsideClickListenerActive) {
-        document.addEventListener('click', handleOutsideClick, true); // 使用捕获阶段
+        document.addEventListener('click', handleOutsideClick, true);
         outsideClickListenerActive = true;
         console.log('Word Munch: 外部点击监听器已添加');
     }
@@ -232,50 +334,39 @@ function handleOutsideClick(event) {
             clickY >= rect.top - padding && 
             clickY <= rect.bottom + padding) {
             console.log('Word Munch: 点击在选中区域内，不关闭');
-            return; // 点击在选中区域内，不关闭
+            return;
         }
     }
     
     // 其他情况关闭浮动窗口
     console.log('Word Munch: 点击在外部，关闭浮动窗口');
-    closeFloatingWidget(); // 使用完全清理函数
+    closeFloatingWidget();
 }
 
-// 隐藏浮动窗口
+// 隐藏浮动窗口（保持向后兼容）
 function hideFloatingWidget() {
-    console.log('Word Munch: 开始隐藏浮动窗口');
-    
-    if (floatingWidget) {
-        floatingWidget.classList.remove('show');
-        
-        setTimeout(() => {
-            if (floatingWidget && floatingWidget.parentNode) {
-                floatingWidget.parentNode.removeChild(floatingWidget);
-            }
-            floatingWidget = null;
-            console.log('Word Munch: 浮动窗口已从DOM移除');
-        }, 200);
-        
-        // 移除外部点击监听器
-        removeOutsideClickListener();
-    }
+    cleanupPreviousWidget();
     
     // 只重置部分状态，保留currentSelection直到新窗口创建
-    currentResult = null;
-    currentSynonymIndex = 0;
     console.log('Word Munch: 部分状态已重置');
 }
 
 // 完全清理浮动窗口和所有状态
 function closeFloatingWidget() {
     console.log('Word Munch: 完全关闭浮动窗口');
-    hideFloatingWidget();
+    
+    // 取消当前请求
+    cancelCurrentRequest();
+    
+    // 清除待处理选择
+    pendingSelection = null;
+    
+    cleanupPreviousWidget();
     
     // 完全重置所有状态
     currentSelection = null;
     currentResult = null;
     currentSynonymIndex = 0;
-    // 但保留最近结果的缓存，用于快速重新显示
     console.log('Word Munch: 所有状态已清理（保留结果缓存）');
 }
 
@@ -293,6 +384,27 @@ function startSimplification(text, type) {
         return;
     }
     
+    // 生成请求ID
+    const requestId = Math.random().toString(36).substr(2, 9);
+    currentRequestId = requestId;
+    
+    // 清除之前的超时
+    if (requestTimeout) {
+        clearTimeout(requestTimeout);
+    }
+    
+    // 设置15秒超时
+    requestTimeout = setTimeout(() => {
+        if (currentRequestId === requestId && floatingWidget) {
+            console.warn('Word Munch: 简化请求超时:', text);
+            showSimplificationError('请求超时，请重试');
+            
+            // 清理超时状态
+            currentRequestId = null;
+            requestTimeout = null;
+        }
+    }, 15000);
+    
     // 发送消息到 background
     sendMessageToBackground({
         type: type === 'word' ? 'WORD_SELECTED' : 'SENTENCE_SELECTED',
@@ -300,8 +412,23 @@ function startSimplification(text, type) {
         text: text,
         context: context,
         url: window.location.href,
-        title: document.title
+        title: document.title,
+        requestId: requestId
     });
+}
+
+// 处理待处理的选择
+function processPendingSelection() {
+    if (pendingSelection) {
+        console.log('Word Munch: 处理待处理的选择:', pendingSelection.text);
+        const selection = pendingSelection;
+        pendingSelection = null; // 清除待处理状态
+        
+        // 延迟一点处理，确保当前操作完成
+        setTimeout(() => {
+            processTextSelection(selection);
+        }, 100);
+    }
 }
 
 // 显示简化结果
@@ -361,7 +488,7 @@ function updateSynonymDisplay() {
         synonymEl.textContent = synonymText;
         console.log('Word Munch: 显示同义词:', synonymText);
         
-        // 更新按钮状态 - 极简版只改变透明度和鼠标样式
+        // 更新按钮状态
         if (simplifyBtn) {
             if (currentSynonymIndex < currentResult.synonyms.length - 1) {
                 simplifyBtn.disabled = false;
@@ -408,7 +535,6 @@ function copySynonymToClipboard() {
         navigator.clipboard.writeText(synonymText).then(() => {
             const copyBtn = floatingWidget.querySelector('.wm-copy-btn');
             if (copyBtn) {
-                // 极简版：直接改变样式类而不是文字
                 copyBtn.classList.add('success');
                 
                 setTimeout(() => {
@@ -434,9 +560,48 @@ function showSimplificationError(error) {
     if (resultEl) resultEl.classList.remove('show');
     if (errorEl) {
         errorEl.classList.add('show');
-        errorEl.textContent = error || '简化失败，请重试';
+        
+        // 创建重试按钮，使用事件监听器而不是内联onclick
+        errorEl.innerHTML = `
+            <div style="margin-bottom: 8px;">${error || '简化失败'}</div>
+            <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
+                重试
+            </button>
+        `;
+        
+        // 绑定重试按钮事件
+        const retryBtn = errorEl.querySelector('.wm-retry-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                retrySimplification();
+            });
+        }
     }
 }
+
+// 添加重试函数
+function retrySimplification() {
+    if (!currentSelection) return;
+    
+    console.log('Word Munch: 重试简化:', currentSelection.text);
+    
+    // 重置错误状态
+    const errorEl = floatingWidget?.querySelector('.wm-error');
+    const loadingEl = floatingWidget?.querySelector('.wm-loading');
+    
+    if (errorEl) errorEl.classList.remove('show');
+    if (loadingEl) loadingEl.style.display = 'flex';
+    
+    // 判断类型并重新开始简化
+    const text = currentSelection.text;
+    const type = isValidWord(text) ? 'word' : 'sentence';
+    
+    startSimplification(text, type);
+}
+
+// 在全局作用域添加重试函数，供内联点击使用（保留向后兼容）
+window.retrySimplification = retrySimplification;
 
 // === 修复的消息发送函数 ===
 function sendMessageToBackground(message) {
@@ -511,29 +676,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function handleWordSimplified(word, result) {
     console.log('Word Munch: 词汇简化完成:', word, result);
     
+    // 检查这个结果是否对应当前的请求
+    if (!floatingWidget || !currentSelection || currentSelection.text !== word) {
+        console.log('Word Munch: 结果不匹配当前状态，忽略:', {
+            hasWidget: !!floatingWidget,
+            hasSelection: !!currentSelection,
+            currentText: currentSelection?.text,
+            resultWord: word
+        });
+        return;
+    }
+    
+    // 清除超时
+    if (requestTimeout) {
+        clearTimeout(requestTimeout);
+        requestTimeout = null;
+    }
+    
     // 保存最近的结果
     lastWordText = word;
     lastWordResult = result;
     lastResultTime = Date.now();
     
-    // 确保不创建新的浮动窗口，只更新现有的
-    if (floatingWidget && currentSelection && currentSelection.text === word) {
-        console.log('Word Munch: 更新现有浮动窗口的结果');
-        showSimplificationResult(result);
-    } else {
-        console.log('Word Munch: 浮动窗口状态不匹配，忽略结果');
-        console.log('- floatingWidget存在:', !!floatingWidget);
-        console.log('- currentSelection存在:', !!currentSelection);
-        console.log('- 文本匹配:', currentSelection?.text === word);
-    }
+    console.log('Word Munch: 更新现有浮动窗口的结果');
+    showSimplificationResult(result);
+    
+    // 重置请求ID
+    currentRequestId = null;
+    
+    // 处理待处理的选择
+    processPendingSelection();
 }
 
 // 处理简化错误
 function handleSimplifyError(word, error) {
     console.error('Word Munch: 简化失败:', word, error);
     
+    // 检查这个错误是否对应当前的请求
+    if (!floatingWidget || !currentSelection || currentSelection.text !== word) {
+        console.log('Word Munch: 错误不匹配当前状态，忽略:', {
+            hasWidget: !!floatingWidget,
+            hasSelection: !!currentSelection,
+            currentText: currentSelection?.text,
+            errorWord: word
+        });
+        return;
+    }
+    
+    // 清除超时
+    if (requestTimeout) {
+        clearTimeout(requestTimeout);
+        requestTimeout = null;
+    }
+    
+    // 重置请求ID
+    currentRequestId = null;
+    
     // 在浮动窗口中显示错误
     showSimplificationError(error);
+    
+    // 处理待处理的选择
+    processPendingSelection();
 }
 
 // 处理设置更新
@@ -543,7 +746,7 @@ function handleSettingsUpdated(settings) {
     // 如果扩展被禁用，隐藏浮动窗口
     if (!settings.extensionEnabled) {
         console.log('Word Munch: 扩展已禁用');
-        closeFloatingWidget(); // 使用完全清理函数
+        closeFloatingWidget();
     }
 }
 
