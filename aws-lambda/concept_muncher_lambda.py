@@ -87,25 +87,25 @@ class TextComprehensionAnalyzer:
         return segments
     
     def _perform_text_segmentation(self, text: str) -> List[Dict[str, Any]]:
-        """Execute actual text segmentation"""
+        """Execute actual text segmentation - DECIMAL FIXED"""
         segments = []
+            
+        # Use negative lookbehind and lookahead to avoid splitting on decimals
+        # (?<!\d)\.(?!\d) means: period that's not preceded by digit and not followed by digit
+        sentence_parts = re.split(r'(?<!\d)\.(?!\d)|[!?。！？]', text)
         
-        # Enhanced segmentation algorithm: sentence-based only
-        sentences = re.split(r'[.!?。！？]', text)
         current_pos = 0
-        
-        for sentence in sentences:
-            sentence = sentence.strip()
+        for part in sentence_parts:
+            sentence = part.strip()
             if not sentence:
                 continue
-                
+            
             # Find sentence position in original text
             start_pos = text.find(sentence, current_pos)
             if start_pos == -1:
                 start_pos = current_pos
             end_pos = start_pos + len(sentence)
             
-            # Only sentence-level segmentation (remove phrase segmentation)
             segments.append({
                 "text": sentence,
                 "start": start_pos,
@@ -114,10 +114,11 @@ class TextComprehensionAnalyzer:
                 "level": "primary"
             })
             
-            current_pos = end_pos + 1
+            current_pos = end_pos
         
+        logger.info(f"Segmented text into {len(segments)} sentences (decimal-safe)")
         return segments
-    
+
     def extract_context_automatically(self, text: str) -> Dict[str, Any]:
         """
         Automatically extract context from text using Claude 3 Haiku
