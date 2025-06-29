@@ -350,3 +350,143 @@
     opacity: 1;
     transform: translateX(0);
 }
+
+/* ========== 阅读模式样式 ========== */
+#word-munch-reader-container {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: #f8f9fa !important;
+    z-index: 2147483647 !important;
+    overflow-y: auto !important;
+    padding: 20px !important;
+    display: block !important;
+    visibility: visible !important;
+    box-sizing: border-box !important;
+}
+
+#word-munch-reader-container * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+#word-munch-reader-container .reader-container {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+#word-munch-reader-container .reader-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 24px;
+    text-align: center;
+    position: relative;
+}
+
+#word-munch-reader-container .exit-btn {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+#word-munch-reader-container .exit-btn:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+#word-munch-reader-container .article-title {
+    font-size: 2em;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+#word-munch-reader-container .article-byline {
+    opacity: 0.9;
+    font-size: 1em;
+}
+
+#word-munch-reader-container .reader-content {
+    padding: 40px;
+    font-size: 18px;
+    line-height: 1.8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    color: #333;
+}
+
+#word-munch-reader-container .reader-content h1,
+#word-munch-reader-container .reader-content h2,
+#word-munch-reader-container .reader-content h3 {
+    margin: 24px 0 16px 0;
+    color: #2d3748;
+}
+
+#word-munch-reader-container .reader-content p {
+    margin-bottom: 16px;
+}
+
+#word-munch-reader-container .reader-content img {
+    max-width: 100%;
+    height: auto;
+    margin: 16px 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    display: block;
+}
+
+#word-munch-reader-container .reader-content img[src=""],
+#word-munch-reader-container .reader-content img:not([src]) {
+    display: none;
+}
+
+#word-munch-reader-container .reader-content figure {
+    margin: 20px 0;
+    text-align: center;
+}
+
+#word-munch-reader-container .reader-content figcaption {
+    font-size: 0.9em;
+    color: #666;
+    margin-top: 8px;
+    font-style: italic;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    #word-munch-reader-container {
+        padding: 10px;
+    }
+    #word-munch-reader-container .reader-header {
+        padding: 20px;
+    }
+    #word-munch-reader-container .article-title {
+        font-size: 1.6em;
+    }
+    #word-munch-reader-container .reader-content {
+        padding: 24px;
+        font-size: 16px;
+    }
+}
+
+/* 确保浮动窗口在阅读模式上方显示 */
+.word-munch-floating-widget {
+    z-index: 2147483648 !important; /* 比阅读模式更高 */
+}
+
+#word-munch-reader-container .word-munch-floating-widget {
+    position: fixed !important;
+}

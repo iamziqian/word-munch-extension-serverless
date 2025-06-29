@@ -398,3 +398,23 @@ button:disabled,
 input:disabled {
     cursor: not-allowed;
 }
+
+/* 阅读模式按钮样式 */
+.reader-mode-button {
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+}
+
+.reader-mode-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}

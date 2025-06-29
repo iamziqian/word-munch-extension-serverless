@@ -941,3 +941,281 @@ window.addEventListener('error', function(event) {
 });
 
 console.log('Word Munch: Content script 初始化完成');
+
+// ========== 简单阅读模式功能 ==========
+
+class SimpleReaderMode {
+    constructor() {
+      this.isReaderActive = false;
+      this.originalScrollPosition = 0;
+      this.setupReaderMessageListener();
+    }
+  
+    setupReaderMessageListener() {
+      // 简单地添加一个新的监听器，不干扰现有的监听器
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        // 只处理阅读模式消息，其他消息让现有监听器处理
+        if (message.type === 'TOGGLE_READER_MODE') {
+          console.log('Word Munch: 收到阅读模式切换消息');
+          try {
+            this.toggleReaderMode();
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('Word Munch: 阅读模式切换失败:', error);
+            sendResponse({ success: false, error: error.message });
+          }
+          return false; // 同步响应
+        }
+        
+        // 其他消息不处理，让现有监听器处理
+        return false;
+      });
+    }
+  
+    toggleReaderMode() {
+      if (this.isReaderActive) {
+        this.exitReaderMode();
+      } else {
+        this.activateReaderMode();
+      }
+    }
+  
+    activateReaderMode() {
+      try {
+        console.log('Word Munch: 激活简单阅读模式');
+        
+        // 检查 Readability 是否可用
+        if (typeof Readability === 'undefined') {
+          console.error('Word Munch: Readability 库未加载');
+          alert('Readability 库未加载，请刷新页面重试');
+          return;
+        }
+  
+        console.log('Word Munch: Readability 库已加载');
+  
+        // 检查页面是否适合阅读模式
+        if (typeof isProbablyReaderable === 'function') {
+          const isReadable = isProbablyReaderable(document);
+          console.log('Word Munch: 页面可读性检查:', isReadable);
+          
+          if (!isReadable) {
+            const proceed = confirm('当前页面可能不适合阅读模式，是否继续？');
+            if (!proceed) return;
+          }
+        } else {
+          console.log('Word Munch: isProbablyReaderable 函数不可用，跳过检查');
+        }
+  
+        // 关闭现有的 Word Munch 浮动窗口，避免冲突
+        if (typeof floatingWidget !== 'undefined' && floatingWidget) {
+          console.log('Word Munch: 关闭现有浮动窗口');
+          closeFloatingWidget();
+        }
+  
+        // 保存当前状态
+        this.originalScrollPosition = window.scrollY;
+        console.log('Word Munch: 保存滚动位置:', this.originalScrollPosition);
+  
+        // 创建文档副本并解析
+        console.log('Word Munch: 开始创建文档副本');
+        const documentClone = document.cloneNode(true);
+        console.log('Word Munch: 文档副本创建完成');
+        
+        // 修复文档副本中的相对URL
+        this.fixRelativeUrls(documentClone);
+        
+        console.log('Word Munch: 开始 Readability 解析');
+        const reader = new Readability(documentClone, {
+          debug: false,
+          charThreshold: 200,
+          keepClasses: false
+        });
+  
+        const article = reader.parse();
+        console.log('Word Munch: Readability 解析完成');
+  
+        console.log('Word Munch: Readability 解析结果:', article);
+        console.log('Word Munch: 文章标题:', article?.title);
+        console.log('Word Munch: 文章内容长度:', article?.content?.length);
+        console.log('Word Munch: 文章文本长度:', article?.textContent?.length);
+  
+        if (!article) {
+          console.error('Word Munch: Readability 解析失败，article 为 null');
+          alert('无法提取文章内容：解析失败');
+          return;
+        }
+  
+        if (!article.textContent || article.textContent.trim().length === 0) {
+          console.error('Word Munch: 文章文本内容为空');
+          alert('无法提取文章内容：文本内容为空');
+          return;
+        }
+  
+        if (!article.content || article.content.trim().length === 0) {
+          console.error('Word Munch: 文章HTML内容为空');
+          alert('无法提取文章内容：HTML内容为空');
+          return;
+        }
+  
+        // 显示简单的阅读模式
+        console.log('Word Munch: 开始渲染阅读模式');
+        this.renderSimpleReader(article);
+        this.isReaderActive = true;
+        
+        console.log('Word Munch: 简单阅读模式已激活');
+  
+      } catch (error) {
+        console.error('Word Munch: 激活阅读模式失败:', error);
+        console.error('Word Munch: 错误堆栈:', error.stack);
+        alert('阅读模式启动失败：' + error.message);
+      }
+    }
+  
+    renderSimpleReader(article) {
+      console.log('Word Munch: 开始渲染阅读器');
+      
+      // 创建阅读器容器
+      const readerContainer = document.createElement('div');
+      readerContainer.id = 'word-munch-reader-container';
+      const contentHTML = this.getReaderContentHTML(article);
+      console.log('Word Munch: 生成的HTML长度:', contentHTML.length);
+      readerContainer.innerHTML = contentHTML;
+      
+      // 添加到页面
+      document.body.appendChild(readerContainer);
+      console.log('Word Munch: 阅读器已添加到DOM');
+      
+      // 隐藏其他内容，但保留 Word Munch 相关元素
+      Array.from(document.body.children).forEach(child => {
+        if (child.id !== 'word-munch-reader-container' && 
+            !child.id?.includes('word-munch') &&
+            !child.classList?.contains('word-munch-floating-widget') &&
+            !child.classList?.contains('word-munch-tooltip') &&
+            !child.classList?.contains('word-munch-toast') &&
+            !child.classList?.contains('word-munch-highlight')) {
+          child.style.display = 'none';
+        }
+      });
+      
+      console.log('Word Munch: 已隐藏其他内容');
+      
+      // 绑定退出事件
+      this.bindExitEvent();
+    }
+  
+    getReaderContentHTML(article) {
+      return `
+        <div class="reader-container">
+          <div class="reader-header">
+            <button id="exitReaderBtn" class="exit-btn">← 退出阅读</button>
+            <h1 class="article-title">${article.title}</h1>
+            ${article.byline ? `<div class="article-byline">作者：${article.byline}</div>` : ''}
+          </div>
+          
+          <div class="reader-content">
+            ${article.content}
+          </div>
+        </div>
+      `;
+    }
+  
+    bindExitEvent() {
+      const exitBtn = document.getElementById('exitReaderBtn');
+      if (exitBtn) {
+        exitBtn.addEventListener('click', () => this.exitReaderMode());
+      }
+  
+      // ESC 键退出
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this.exitReaderMode();
+        }
+      });
+    }
+  
+    exitReaderMode() {
+      console.log('Word Munch: 退出阅读模式');
+      
+      // 移除阅读器容器
+      const readerContainer = document.getElementById('word-munch-reader-container');
+      if (readerContainer) {
+        readerContainer.remove();
+      }
+      
+      // 恢复所有隐藏的元素显示（但保持 Word Munch 元素状态）
+      Array.from(document.body.children).forEach(child => {
+        if (child.style.display === 'none' && 
+            !child.id?.includes('word-munch') &&
+            !child.classList?.contains('word-munch-floating-widget') &&
+            !child.classList?.contains('word-munch-tooltip') &&
+            !child.classList?.contains('word-munch-toast') &&
+            !child.classList?.contains('word-munch-highlight')) {
+          child.style.display = '';
+        }
+      });
+      
+      // 恢复滚动位置
+      setTimeout(() => {
+        window.scrollTo(0, this.originalScrollPosition);
+      }, 100);
+      
+      this.isReaderActive = false;
+    }
+  
+    // 修复文档中的相对URL
+    fixRelativeUrls(doc) {
+      const baseUrl = window.location.origin + window.location.pathname;
+      const baseDir = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+      
+      // 修复图片src
+      const images = doc.querySelectorAll('img[src]');
+      images.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+          if (src.startsWith('/')) {
+            img.setAttribute('src', window.location.origin + src);
+          } else if (src.startsWith('./') || !src.includes('/')) {
+            img.setAttribute('src', baseDir + src.replace('./', ''));
+          }
+        }
+      });
+      
+      // 修复懒加载图片（常见的data-src属性）
+      const lazyImages = doc.querySelectorAll('img[data-src]');
+      lazyImages.forEach(img => {
+        const dataSrc = img.getAttribute('data-src');
+        if (dataSrc) {
+          if (!dataSrc.startsWith('http') && !dataSrc.startsWith('data:')) {
+            if (dataSrc.startsWith('/')) {
+              img.setAttribute('src', window.location.origin + dataSrc);
+            } else {
+              img.setAttribute('src', baseDir + dataSrc.replace('./', ''));
+            }
+          } else {
+            img.setAttribute('src', dataSrc);
+          }
+          img.removeAttribute('data-src');
+        }
+      });
+      
+      // 修复链接href
+      const links = doc.querySelectorAll('a[href]');
+      links.forEach(link => {
+        const href = link.getAttribute('href');
+        if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('mailto:')) {
+          if (href.startsWith('/')) {
+            link.setAttribute('href', window.location.origin + href);
+          } else {
+            link.setAttribute('href', baseDir + href.replace('./', ''));
+          }
+        }
+      });
+      
+      console.log('Word Munch: 已修复相对URL');
+    }
+  }
+  
+  // 初始化简单阅读器
+  const simpleReader = new SimpleReaderMode();
+  
+  console.log('Word Munch: 简单阅读模式已加载');

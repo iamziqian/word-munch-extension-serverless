@@ -215,4 +215,30 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.appendChild(messageEl);
         setTimeout(() => messageEl.remove(), 3000);
     }
+
+    // 简化的阅读模式按钮事件（替换现有的复杂版本）
+    const readerModeBtn = document.getElementById('reader-mode-btn');
+    if (readerModeBtn) {
+        readerModeBtn.addEventListener('click', function() {
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+                if (tabs[0]) {
+                    chrome.tabs.sendMessage(tabs[0].id, {
+                        type: 'TOGGLE_READER_MODE'
+                    }, function(response) {
+                        if (chrome.runtime.lastError) {
+                            console.error('发送阅读模式消息失败:', chrome.runtime.lastError.message);
+                            if (chrome.runtime.lastError.message.includes('Could not establish connection')) {
+                                showMessage('请刷新页面后重试', 'error');
+                            }
+                            // 移除其他错误提示，避免误报
+                        } else {
+                            // 只要没有运行时错误，就关闭popup（不管response内容）
+                            console.log('阅读模式消息已发送');
+                            window.close();
+                        }
+                    });
+                }
+            });
+        });
+    }
 });
