@@ -932,12 +932,23 @@ class SimpleReaderMode {
       this.originalScrollPosition = 0;
       this.isChunkedMode = false;
       this.isColorMode = false;
-      this.isFocusMode = false; 
+      this.focusMode = 'balanced';
       this.chunks = [];
       this.currentChunkIndex = -1;
       this.keyboardHandler = null;
       this.keyPressTimer = null;
+      this.loadFocusSettings();
       this.setupReaderMessageListener();
+    }
+
+    // 加载专注模式设置
+    loadFocusSettings() {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.sync.get(['focusMode'], (result) => {
+          this.focusMode = result.focusMode || 'balanced';
+          console.log('Word Munch: 加载专注模式设置:', this.focusMode);
+        });
+      }
     }
 
     // 键盘导航段落
@@ -1013,6 +1024,19 @@ class SimpleReaderMode {
             success: true 
           });
           return false; // 同步响应
+        }
+
+        // 处理专注模式更新
+        if (message.type === 'UPDATE_FOCUS_MODE') {
+          this.focusMode = message.mode;
+          console.log('Word Munch: 更新专注模式为:', this.focusMode);
+          
+          // 如果当前在专注模式，立即应用
+          if (this.isFocusMode) {
+            this.applyFocusMode();
+          }
+          sendResponse({ success: true });
+          return false;
         }
         
         // 其他消息不处理，让现有监听器处理
@@ -1178,18 +1202,18 @@ class SimpleReaderMode {
         `;
     }
 
-    // 添加退出专注模式的方法
+    // 退出专注模式的方法
     exitFocusMode() {
       const readerContent = document.getElementById('readerContent');
       
       // 移除所有聚焦状态
       document.querySelectorAll('.text-chunk').forEach(chunk => {
-        chunk.classList.remove('focused');
+        chunk.classList.remove('focused', 'adjacent');
       });
       
       // 退出专注模式
       if (readerContent) {
-        readerContent.classList.remove('focus-mode');
+        readerContent.classList.remove('focus-mode', 'focus-gentle', 'focus-balanced', 'focus-focused', 'focus-minimal');
         this.isFocusMode = false;
       }
       
@@ -1420,13 +1444,50 @@ class SimpleReaderMode {
         this.currentChunkIndex = -1;
         this.isFocusMode = false;
       }
-    }    
+    }
+
+    // 应用专注模式
+    applyFocusMode() {
+      const readerContent = document.getElementById('readerContent');
+      if (!readerContent) return;
+      
+      // 移除所有模式类
+      readerContent.classList.remove('focus-gentle', 'focus-balanced', 'focus-focused', 'focus-minimal');
+      
+      // 添加当前模式类
+      readerContent.classList.add(`focus-${this.focusMode}`);
+      
+      // 更新相邻段落标记
+      this.updateAdjacentChunks();
+      
+      console.log('Word Munch: 应用专注模式:', this.focusMode);
+    }
+
+    // 更新相邻段落标记
+    updateAdjacentChunks() {
+      const chunks = document.querySelectorAll('.text-chunk');
+      
+      // 清除所有相邻标记
+      chunks.forEach(chunk => chunk.classList.remove('adjacent'));
+      
+      // 标记相邻段落
+      if (this.currentChunkIndex >= 0 && this.currentChunkIndex < chunks.length) {
+        // 前一个段落
+        if (this.currentChunkIndex > 0) {
+          chunks[this.currentChunkIndex - 1].classList.add('adjacent');
+        }
+        // 后一个段落
+        if (this.currentChunkIndex < chunks.length - 1) {
+          chunks[this.currentChunkIndex + 1].classList.add('adjacent');
+        }
+      }
+    }
   
     // 聚焦段落
     focusChunk(chunkElement, index) {
       const readerContent = document.getElementById('readerContent');
       
-      console.log('Word Munch: 聚焦段落 DOM 元素，索引:', index);
+      console.log('Word Munch: 聚焦段落，索引:', index);
       
       // 移除其他段落的焦点
       document.querySelectorAll('.text-chunk').forEach(chunk => {
@@ -1436,9 +1497,10 @@ class SimpleReaderMode {
       // 添加当前段落焦点
       chunkElement.classList.add('focused');
       
-      // 启用专注模式（淡化其他段落）
+      // 启用专注模式
       if (readerContent) {
         readerContent.classList.add('focus-mode');
+        this.applyFocusMode(); // 应用当前模式
         this.isFocusMode = true;
       }
       
@@ -1447,10 +1509,8 @@ class SimpleReaderMode {
         behavior: 'smooth', 
         block: 'center' 
       });
-    
-      console.log('Word Munch: 段落聚焦完成，当前索引:', this.currentChunkIndex);
     }
-  
+
     // 切换彩色模式
     toggleColorMode() {
       this.isColorMode = !this.isColorMode;

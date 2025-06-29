@@ -418,3 +418,112 @@ input:disabled {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
+
+/* 专注模式设置样式 */
+.focus-modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.mode-option:hover {
+    border-color: #667eea;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.mode-option.active {
+    border-color: #667eea;
+    background: linear-gradient(135deg, #f8f9ff, #ffffff);
+    box-shadow: 0 2px 12px rgba(102, 126, 234, 0.2);
+}
+
+.mode-icon {
+    font-size: 18px;
+    width: 24px;
+    text-align: center;
+}
+
+.mode-info {
+    flex: 1;
+}
+
+.mode-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.mode-desc {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.2;
+}
+
+/* 预览区域 */
+.focus-preview {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 8px;
+}
+
+.preview-text {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.preview-line {
+    padding: 4px 8px;
+    margin-bottom: 2px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.preview-line.focused {
+    background: rgba(102, 126, 234, 0.1);
+    border-left: 3px solid #667eea;
+    color: #333;
+    font-weight: 500;
+    opacity: 1 !important; /* 确保聚焦段落始终清晰 */
+}
+
+.preview-line.unfocused {
+    color: #999;
+    opacity: 0.5; /* 默认效果 */
+}
+
+/* 不同模式的预览效果 */
+.focus-preview[data-mode="gentle"] .preview-line.unfocused { 
+    opacity: 0.7; 
+    color: #666;
+}
+
+.focus-preview[data-mode="balanced"] .preview-line.unfocused { 
+    opacity: 0.5; 
+    color: #999;
+}
+
+.focus-preview[data-mode="focused"] .preview-line.unfocused { 
+    opacity: 0.3; 
+    color: #bbb;
+}
+
+.focus-preview[data-mode="minimal"] .preview-line.unfocused { 
+    opacity: 0.15; 
+    color: #ddd;
+}

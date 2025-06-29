@@ -241,4 +241,53 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+    
+    // 专注模式设置
+    const focusModes = document.querySelector('.focus-modes');
+    const modeOptions = document.querySelectorAll('.mode-option');
+
+    if (focusModes && modeOptions.length > 0) {
+        // 加载保存的设置
+        chrome.storage.sync.get(['focusMode'], function(result) {
+            const savedMode = result.focusMode || 'balanced';
+            selectFocusMode(savedMode);
+        });
+        
+        // 绑定模式选择事件
+        modeOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                const mode = this.dataset.mode;
+                selectFocusMode(mode);
+                
+                // 保存设置
+                chrome.storage.sync.set({ focusMode: mode });
+                
+                // 通知content script更新设置
+                chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+                    if (tabs[0]) {
+                        chrome.tabs.sendMessage(tabs[0].id, {
+                            type: 'UPDATE_FOCUS_MODE',
+                            mode: mode
+                        });
+                    }
+                });
+            });
+        });
+    }
+
+    // 选择专注模式
+    function selectFocusMode(mode) {
+        // 更新选中状态
+        modeOptions.forEach(option => {
+            option.classList.toggle('active', option.dataset.mode === mode);
+        });
+        
+        // 更新预览效果
+        const focusPreview = document.querySelector('.focus-preview');
+        if (focusPreview) {
+            focusPreview.setAttribute('data-mode', mode);
+        }
+        
+        console.log('Word Munch: 选择专注模式:', mode);
+    }
 });

@@ -661,3 +661,85 @@
         font-size: 10px;
     }
 }
+
+/* 基础专注模式 */
+#word-munch-reader-container .reader-content.focus-mode {
+    position: relative;
+}
+
+#word-munch-reader-container .reader-content.focus-mode::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(248, 250, 252, 0.2);
+    backdrop-filter: blur(0.5px);
+    pointer-events: none;
+    z-index: 1;
+}
+
+#word-munch-reader-container .reader-content.focus-mode .text-chunk {
+    position: relative;
+    z-index: 2;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(0.99);
+}
+
+#word-munch-reader-container .reader-content.focus-mode .text-chunk.focused {
+    opacity: 1 !important;
+    transform: scale(1.02);
+    z-index: 10;
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.15);
+    border: 2px solid rgba(102, 126, 234, 0.2);
+}
+
+/* 相邻段落效果 */
+#word-munch-reader-container .reader-content.focus-mode .text-chunk.adjacent {
+    transform: scale(1.0);
+}
+
+/* 轻柔模式 - 30% 淡化 */
+#word-munch-reader-container .reader-content.focus-gentle .text-chunk {
+    opacity: 0.7;
+}
+#word-munch-reader-container .reader-content.focus-gentle .text-chunk.adjacent {
+    opacity: 0.85;
+}
+
+/* 平衡模式 - 50% 淡化 (默认推荐) */
+#word-munch-reader-container .reader-content.focus-balanced .text-chunk {
+    opacity: 0.5;
+}
+#word-munch-reader-container .reader-content.focus-balanced .text-chunk.adjacent {
+    opacity: 0.7;
+}
+
+/* 专注模式 - 70% 淡化 */
+#word-munch-reader-container .reader-content.focus-focused .text-chunk {
+    opacity: 0.3;
+}
+#word-munch-reader-container .reader-content.focus-focused .text-chunk.adjacent {
+    opacity: 0.5;
+}
+
+/* 极简模式 - 85% 淡化 */
+#word-munch-reader-container .reader-content.focus-minimal .text-chunk {
+    opacity: 0.15;
+}
+#word-munch-reader-container .reader-content.focus-minimal .text-chunk.adjacent {
+    opacity: 0.3;
+}
+
+/* 增强聚焦段落效果 */
+#word-munch-reader-container .text-chunk.focused {
+    background: rgba(255, 255, 255, 0.95);
+    border-left-color: #667eea;
+}
+
+#word-munch-reader-container .reader-content.focus-mode .text-chunk.focused .chunk-number {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}

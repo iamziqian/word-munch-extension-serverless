@@ -44,6 +44,53 @@
                     📖 启动阅读分段模式
                 </button>
             </div>
+
+            <!-- 专注模式设置 -->
+            <div class="control-section">
+                <h3 class="section-title">专注设置</h3>
+                
+                <div class="focus-modes">
+                    <div class="mode-option" data-mode="gentle">
+                        <div class="mode-icon">🌸</div>
+                        <div class="mode-info">
+                            <div class="mode-name">轻柔模式</div>
+                            <div class="mode-desc">保留更多上下文</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mode-option active" data-mode="balanced">
+                        <div class="mode-icon">⚖️</div>
+                        <div class="mode-info">
+                            <div class="mode-name">平衡模式</div>
+                            <div class="mode-desc">推荐默认设置</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mode-option" data-mode="focused">
+                        <div class="mode-icon">🎯</div>
+                        <div class="mode-info">
+                            <div class="mode-name">专注模式</div>
+                            <div class="mode-desc">强烈突出当前段</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mode-option" data-mode="minimal">
+                        <div class="mode-icon">🔍</div>
+                        <div class="mode-info">
+                            <div class="mode-name">极简模式</div>
+                            <div class="mode-desc">几乎隐藏其他段</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="focus-preview">
+                    <div class="preview-text">
+                        <div class="preview-line unfocused">其他段落的显示效果</div>
+                        <div class="preview-line focused">当前聚焦段落效果</div>
+                        <div class="preview-line unfocused">其他段落的显示效果</div>
+                    </div>
+                </div>
+            </div>
             
             <!-- 用户登录状态 -->
             <!-- <div class="control-section" id="user-section">
