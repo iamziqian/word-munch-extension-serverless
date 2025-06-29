@@ -933,8 +933,37 @@ class SimpleReaderMode {
       this.isChunkedMode = false;
       this.isColorMode = false;
       this.chunks = [];
+      this.currentChunkIndex = -1;
       this.setupReaderMessageListener();
     }
+
+    // 键盘导航段落
+    navigateChunks(direction) {
+        const chunks = document.querySelectorAll('.text-chunk');
+        if (chunks.length === 0) return;
+    
+        let newIndex;
+        
+        if (direction === 'next') {
+        newIndex = this.currentChunkIndex < chunks.length - 1 ? 
+                    this.currentChunkIndex + 1 : 0; // 循环到第一个
+        } else {
+        newIndex = this.currentChunkIndex > 0 ? 
+                    this.currentChunkIndex - 1 : chunks.length - 1; // 循环到最后一个
+        }
+    
+        this.focusChunkByIndex(newIndex);
+    }
+
+    // 通过索引聚焦段落
+    focusChunkByIndex(index) {
+        const chunks = document.querySelectorAll('.text-chunk');
+        if (index < 0 || index >= chunks.length) return;
+    
+        this.currentChunkIndex = index;
+        this.focusChunk(chunks[index], index);
+    }
+    
   
     setupReaderMessageListener() {
       // 简单地添加一个新的监听器，不干扰现有的监听器
@@ -1142,6 +1171,21 @@ class SimpleReaderMode {
       if (colorToggleBtn) {
         colorToggleBtn.addEventListener('click', () => this.toggleColorMode());
       }
+
+      // 键盘事件处理
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            this.exitReaderMode();
+        }
+            
+        // 只在分段模式下启用箭头键导航
+        if (this.isChunkedMode) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault(); // 阻止页面滚动
+                this.navigateChunks(e.key === 'ArrowDown' ? 'next' : 'prev');
+            }
+        }
+      });
   
       // ESC 键退出
       document.addEventListener('keydown', (e) => {
@@ -1250,23 +1294,27 @@ class SimpleReaderMode {
           <div class="chunk-text">${chunk}</div>
         </div>
       `).join('');
-  
+    
       container.innerHTML = chunkedHTML;
       container.classList.add('chunked-mode');
-  
+    
       // 绑定段落点击事件
       container.querySelectorAll('.text-chunk').forEach((chunk, index) => {
         chunk.addEventListener('click', () => this.focusChunk(chunk, index));
       });
+    
+      // 自动聚焦第一个段落
+      this.currentChunkIndex = -1;
+      this.focusChunkByIndex(0);
     }
   
     // 渲染普通内容
     renderNormalContent(container) {
       // 恢复原始HTML内容
-      const readerContainer = document.querySelector('#word-munch-reader-container .reader-container');
-      if (readerContainer && this.originalArticleContent) {
+      if (this.originalArticleContent) {
         container.innerHTML = this.originalArticleContent;
         container.classList.remove('chunked-mode', 'color-mode');
+        this.currentChunkIndex = -1; // 重置焦点索引
       }
     }
   
@@ -1274,18 +1322,19 @@ class SimpleReaderMode {
     focusChunk(chunkElement, index) {
       // 移除其他段落的焦点
       document.querySelectorAll('.text-chunk').forEach(chunk => {
-        chunk.classList.remove('focused');
+          chunk.classList.remove('focused');
       });
       
       // 添加当前段落焦点
       chunkElement.classList.add('focused');
+      this.currentChunkIndex = index;
       
       // 平滑滚动到段落
       chunkElement.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'center' 
+          behavior: 'smooth', 
+          block: 'center' 
       });
-  
+      
       console.log('Word Munch: 聚焦段落:', index + 1);
     }
   
