@@ -129,7 +129,6 @@ class WordMunchStack(Stack):
                 "PROJECT_NAME": self.project_name,
                 "CACHE_TABLE_NAME": self.cache_table.table_name,
                 "CACHE_ENABLED": "true",
-                "CACHE_TTL": "604800",  # 7 days in seconds
                 "SERVICE_TYPE": "word-muncher"
             }
         )
@@ -138,6 +137,36 @@ class WordMunchStack(Stack):
         self._apply_common_tags(self.word_muncher_lambda, {
             "Service": "word-muncher",
             "Purpose": "vocabulary-simplification"
+        })
+
+        # ============================================================================
+        # Lambda Functions - concept-muncher
+        # ============================================================================
+
+        # Concept Muncher Lambda Function
+        self.concept_muncher_lambda = _lambda.Function(
+            self, "ConceptMuncherLambda",
+            function_name=f"{self.project_name}-concept-muncher-{self.env_name}",
+            description="Concept Muncher Text Comprehension Analysis Service with Semantic Similarity",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            code=_lambda.Code.from_asset(lambda_dir),
+            handler="concept_muncher_lambda.lambda_handler",
+            timeout=Duration.seconds(60), # Increase timeout for longer processing
+            memory_size=1024, # Increase memory for processing embedded vector calculations
+            role=self.lambda_execution_role,
+            environment={
+                "ENVIRONMENT": self.env_name,
+                "PROJECT_NAME": self.project_name,
+                "CACHE_TABLE_NAME": self.cache_table.table_name,
+                "CACHE_ENABLED": "true",
+                "SERVICE_TYPE": "concept-muncher"
+            }
+        )
+
+        # Add tags
+        self._apply_common_tags(self.concept_muncher_lambda, {
+            "Service": "concept-muncher",
+            "Purpose": "text-comprehension-analysis"
         })
 
         # ============================================================================
@@ -212,6 +241,46 @@ class WordMunchStack(Stack):
         )
         print("Created API endpoint: /word-muncher")
 
+        # Concept Muncher API Endpoint
+        concept_muncher_resource = self.api.root.add_resource("concept-muncher")
+        
+        # Integrate with Lambda function
+        concept_muncher_integration = apigw.LambdaIntegration(
+            self.concept_muncher_lambda
+        )
+
+        # POST method for concept-muncher
+        concept_muncher_resource.add_method(
+            "POST",
+            concept_muncher_integration,
+            authorization_type=apigw.AuthorizationType.NONE, # no authorization
+            api_key_required=False,
+            request_models={
+                "application/json": apigw.Model.EMPTY_MODEL
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="400", # client error
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="500", # server error
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                )
+            ]
+        )
+        print("Created API endpoint: /concept-muncher")
+
         # ============================================================================
         # Outputs
         # ============================================================================
@@ -230,6 +299,14 @@ class WordMunchStack(Stack):
             value=f"{self.api.url}word-muncher",
             description="Word Muncher Service URL - 递进式词汇简化服务",
             export_name=f"{self.project_name}-word-muncher-url-{self.env_name}"
+        )
+
+        # Concept Muncher URL
+        CfnOutput(
+            self, "ConceptMuncherUrl",
+            value=f"{self.api.url}concept-muncher",
+            description="Concept Muncher Service URL - 文本理解程度分析服务",
+            export_name=f"{self.project_name}-concept-muncher-url-{self.env_name}"
         )
         
         # DynamoDB表名
