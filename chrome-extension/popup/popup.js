@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => messageEl.remove(), 3000);
     }
 
-    // 简化的阅读模式按钮事件（替换现有的复杂版本）
+    // 阅读模式按钮事件
     const readerModeBtn = document.getElementById('reader-mode-btn');
     if (readerModeBtn) {
         readerModeBtn.addEventListener('click', function() {

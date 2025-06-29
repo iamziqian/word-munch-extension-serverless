@@ -134,24 +134,6 @@ function showFloatingWidget(text, selection, type) {
         selection: selection,
         range: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
     };
-    
-    // 取消当前请求
-function cancelCurrentRequest() {
-    console.log('Word Munch: 取消当前请求');
-    
-    // 清除超时
-    if (requestTimeout) {
-        clearTimeout(requestTimeout);
-        requestTimeout = null;
-        console.log('Word Munch: 已清除请求超时');
-    }
-    
-    // 标记当前请求为无效
-    if (currentRequestId) {
-        console.log('Word Munch: 标记请求为无效:', currentRequestId);
-        currentRequestId = null;
-    }
-}
 
 // 清理之前的浮动窗口（但不重置选择状态）
     cleanupPreviousWidget();
@@ -948,13 +930,16 @@ class SimpleReaderMode {
     constructor() {
       this.isReaderActive = false;
       this.originalScrollPosition = 0;
+      this.isChunkedMode = false;
+      this.isColorMode = false;
+      this.chunks = [];
       this.setupReaderMessageListener();
     }
   
     setupReaderMessageListener() {
       // 简单地添加一个新的监听器，不干扰现有的监听器
       chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        // 只处理阅读模式消息，其他消息让现有监听器处理
+        // 处理阅读模式相关消息
         if (message.type === 'TOGGLE_READER_MODE') {
           console.log('Word Munch: 收到阅读模式切换消息');
           try {
@@ -964,6 +949,16 @@ class SimpleReaderMode {
             console.error('Word Munch: 阅读模式切换失败:', error);
             sendResponse({ success: false, error: error.message });
           }
+          return false; // 同步响应
+        }
+        
+        // 检查阅读模式状态
+        if (message.type === 'CHECK_READER_STATUS') {
+          console.log('Word Munch: 检查阅读模式状态:', this.isReaderActive);
+          sendResponse({ 
+            isReaderActive: this.isReaderActive,
+            success: true 
+          });
           return false; // 同步响应
         }
         
@@ -1059,6 +1054,8 @@ class SimpleReaderMode {
   
         // 显示简单的阅读模式
         console.log('Word Munch: 开始渲染阅读模式');
+        this.chunks = this.createTextChunks(article.textContent);
+        this.originalArticleContent = article.content; // 保存原始内容
         this.renderSimpleReader(article);
         this.isReaderActive = true;
         
@@ -1104,25 +1101,46 @@ class SimpleReaderMode {
     }
   
     getReaderContentHTML(article) {
-      return `
-        <div class="reader-container">
-          <div class="reader-header">
-            <button id="exitReaderBtn" class="exit-btn">← 退出阅读</button>
-            <h1 class="article-title">${article.title}</h1>
-            ${article.byline ? `<div class="article-byline">作者：${article.byline}</div>` : ''}
+        return `
+          <div class="reader-container">
+            <div class="reader-header">
+              <div class="header-controls">
+                <div class="left-controls">
+                  <button id="exitReaderBtn" class="exit-btn">← 退出阅读</button>
+                </div>
+                <div class="right-controls">
+                  <button id="chunkToggleBtn" class="control-btn">📑 分段模式</button>
+                  <button id="colorToggleBtn" class="control-btn" style="display:none;">🌈 彩色分段</button>
+                </div>
+              </div>
+              
+              <h1 class="article-title">${article.title}</h1>
+              ${article.byline ? `<div class="article-byline">作者：${article.byline}</div>` : ''}
+            </div>
+            
+            <div class="reader-content" id="readerContent">
+              ${article.content}
+            </div>
           </div>
-          
-          <div class="reader-content">
-            ${article.content}
-          </div>
-        </div>
-      `;
+        `;
     }
   
     bindExitEvent() {
       const exitBtn = document.getElementById('exitReaderBtn');
       if (exitBtn) {
         exitBtn.addEventListener('click', () => this.exitReaderMode());
+      }
+  
+      // 分段模式切换按钮
+      const chunkToggleBtn = document.getElementById('chunkToggleBtn');
+      if (chunkToggleBtn) {
+        chunkToggleBtn.addEventListener('click', () => this.toggleChunkedMode());
+      }
+  
+      // 彩色模式切换按钮
+      const colorToggleBtn = document.getElementById('colorToggleBtn');
+      if (colorToggleBtn) {
+        colorToggleBtn.addEventListener('click', () => this.toggleColorMode());
       }
   
       // ESC 键退出
@@ -1160,6 +1178,134 @@ class SimpleReaderMode {
       }, 100);
       
       this.isReaderActive = false;
+    }
+  
+    // 创建文本分段
+    createTextChunks(textContent) {
+      // 清理文本
+      const cleanText = textContent.replace(/\s+/g, ' ').trim();
+      
+      // 按句子分割（支持中英文标点）
+      const sentences = cleanText
+        .split(/[.!?。！？；;]\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 15);
+  
+      // 分组成合适大小的段落
+      const chunks = [];
+      let currentChunk = '';
+      const targetLength = 300; // 每段目标长度
+  
+      for (const sentence of sentences) {
+        const testChunk = currentChunk + (currentChunk ? ' ' : '') + sentence + '。';
+        
+        if (testChunk.length > targetLength && currentChunk) {
+          chunks.push(currentChunk + '。');
+          currentChunk = sentence;
+        } else {
+          currentChunk = testChunk.slice(0, -1);
+        }
+      }
+  
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk + '。');
+      }
+  
+      return chunks.filter(chunk => chunk.length > 25);
+    }
+  
+    // 切换分段模式
+    toggleChunkedMode() {
+      this.isChunkedMode = !this.isChunkedMode;
+      const readerContent = document.getElementById('readerContent');
+      const chunkToggleBtn = document.getElementById('chunkToggleBtn');
+      const colorToggleBtn = document.getElementById('colorToggleBtn');
+  
+      if (this.isChunkedMode) {
+        // 切换到分段模式
+        this.renderChunkedContent(readerContent);
+        chunkToggleBtn.textContent = '📄 普通模式';
+        chunkToggleBtn.classList.add('active');
+        if (colorToggleBtn) colorToggleBtn.style.display = 'block';
+      } else {
+        // 切换到普通模式
+        this.renderNormalContent(readerContent);
+        chunkToggleBtn.textContent = '📑 分段模式';
+        chunkToggleBtn.classList.remove('active');
+        if (colorToggleBtn) {
+          colorToggleBtn.style.display = 'none';
+          this.isColorMode = false;
+          readerContent.classList.remove('color-mode');
+        }
+      }
+  
+      console.log('Word Munch: 分段模式切换为:', this.isChunkedMode);
+    }
+  
+    // 渲染分段内容
+    renderChunkedContent(container) {
+      const chunkedHTML = this.chunks.map((chunk, index) => `
+        <div class="text-chunk" data-chunk-index="${index}">
+          <div class="chunk-number">${index + 1}</div>
+          <div class="chunk-text">${chunk}</div>
+        </div>
+      `).join('');
+  
+      container.innerHTML = chunkedHTML;
+      container.classList.add('chunked-mode');
+  
+      // 绑定段落点击事件
+      container.querySelectorAll('.text-chunk').forEach((chunk, index) => {
+        chunk.addEventListener('click', () => this.focusChunk(chunk, index));
+      });
+    }
+  
+    // 渲染普通内容
+    renderNormalContent(container) {
+      // 恢复原始HTML内容
+      const readerContainer = document.querySelector('#word-munch-reader-container .reader-container');
+      if (readerContainer && this.originalArticleContent) {
+        container.innerHTML = this.originalArticleContent;
+        container.classList.remove('chunked-mode', 'color-mode');
+      }
+    }
+  
+    // 聚焦段落
+    focusChunk(chunkElement, index) {
+      // 移除其他段落的焦点
+      document.querySelectorAll('.text-chunk').forEach(chunk => {
+        chunk.classList.remove('focused');
+      });
+      
+      // 添加当前段落焦点
+      chunkElement.classList.add('focused');
+      
+      // 平滑滚动到段落
+      chunkElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+  
+      console.log('Word Munch: 聚焦段落:', index + 1);
+    }
+  
+    // 切换彩色模式
+    toggleColorMode() {
+      this.isColorMode = !this.isColorMode;
+      const readerContent = document.getElementById('readerContent');
+      const colorToggleBtn = document.getElementById('colorToggleBtn');
+  
+      if (this.isColorMode) {
+        readerContent.classList.add('color-mode');
+        colorToggleBtn.textContent = '⚪ 统一颜色';
+        colorToggleBtn.classList.add('active');
+      } else {
+        readerContent.classList.remove('color-mode');
+        colorToggleBtn.textContent = '🌈 彩色分段';
+        colorToggleBtn.classList.remove('active');
+      }
+  
+      console.log('Word Munch: 彩色模式切换为:', this.isColorMode);
     }
   
     // 修复文档中的相对URL
