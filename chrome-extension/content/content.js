@@ -1044,15 +1044,15 @@ class SimpleReaderMode {
       });
     }
   
-    toggleReaderMode() {
+    async toggleReaderMode() {
       if (this.isReaderActive) {
         this.exitReaderMode();
       } else {
-        this.activateReaderMode();
+        await this.activateReaderMode();
       }
     }
   
-    activateReaderMode() {
+    async activateReaderMode() {
       try {
         console.log('Word Munch: 激活简单阅读模式');
         
@@ -1131,7 +1131,7 @@ class SimpleReaderMode {
   
         // 显示简单的阅读模式
         console.log('Word Munch: 开始渲染阅读模式');
-        this.chunks = this.createTextChunks(article.textContent);
+        this.chunks = await this.createTextChunks(article.textContent);
         this.originalArticleContent = article.content; // 保存原始内容
         this.renderSimpleReader(article);
         this.isReaderActive = true;
@@ -1328,8 +1328,33 @@ class SimpleReaderMode {
       this.currentChunkIndex = -1;
     }
 
+    async createTextChunks(textContent) {
+      console.log('Word Munch: 使用五语言语义分段');
+      
+      try {
+        // 创建语义分段器
+        const semanticChunker = window.createFiveLanguageChunker({
+          targetLength: 600,  // 目标段落长度
+          maxLength: 800,     // 最大段落长度
+          minLength: 150      // 最小段落长度
+        });
+        
+        // 执行语义分段
+        const chunks = await semanticChunker.createChunks(textContent);
+        
+        console.log('Word Munch: 语义分段完成，共', chunks.length, '段');
+        return chunks;
+        
+      } catch (error) {
+        console.error('Word Munch: 语义分段失败，使用原始方法:', error);
+        
+        // 回退到原始方法
+        return this.createTextChunksOriginal(textContent);
+      }
+    }
+
     // 创建文本分段
-    createTextChunks(textContent) {
+    createTextChunksOriginal(textContent) {
       // 清理文本
       const cleanText = textContent.replace(/\s+/g, ' ').trim();
       
@@ -1338,30 +1363,87 @@ class SimpleReaderMode {
         .split(/[.!?。！？；;]\s+/)
         .map(s => s.trim())
         .filter(s => s.length > 15);
-  
+
       // 分组成合适大小的段落
       const chunks = [];
       let currentChunk = '';
-      const targetLength = 300; // 每段目标长度
-  
+      const targetLength = 600; // 目标长度从300增加到600
+      const maxLength = 800;    // 最大长度限制
+
       for (const sentence of sentences) {
         const testChunk = currentChunk + (currentChunk ? ' ' : '') + sentence + '。';
         
+        // 智能的分段判断
         if (testChunk.length > targetLength && currentChunk) {
-          chunks.push(currentChunk + '。');
-          currentChunk = sentence;
+          // 如果还没到最大长度，尝试再加一句
+          if (testChunk.length < maxLength) {
+            currentChunk = testChunk.slice(0, -1);
+          } else {
+            chunks.push(currentChunk + '。');
+            currentChunk = sentence;
+          }
         } else {
           currentChunk = testChunk.slice(0, -1);
         }
       }
-  
+
       if (currentChunk.trim()) {
         chunks.push(currentChunk + '。');
       }
-  
-      return chunks.filter(chunk => chunk.length > 25);
+
+      const rawChunks = chunks.filter(chunk => chunk.length > 50); // 提高最小长度
+      console.log('Word Munch: 初始分段 -', rawChunks.length, '段，平均长度:', 
+        Math.round(rawChunks.reduce((sum, c) => sum + c.length, 0) / rawChunks.length));
+
+      // 应用方案2：智能合并优化
+      const optimizedChunks = this.optimizeChunkCount(rawChunks);
+      
+      return optimizedChunks;
     }
-  
+
+    // 方案2：智能段落合并
+    optimizeChunkCount(chunks) {
+      const totalText = chunks.join(' ').length;
+      const idealChunkCount = Math.max(5, Math.min(8, Math.ceil(totalText / 500)));
+      
+      console.log('Word Munch: 优化前', chunks.length, '段，目标', idealChunkCount, '段');
+      
+      if (chunks.length <= idealChunkCount) {
+        console.log('Word Munch: 段落数量已合适，无需优化');
+        return chunks; // 已经是理想数量
+      }
+      
+      // 智能合并相邻段落
+      const optimized = [];
+      let currentMerged = '';
+      
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const testMerged = currentMerged + (currentMerged ? ' ' : '') + chunk;
+        
+        // 合并条件：不超过700字符，且还没达到理想数量
+        if (testMerged.length <= 700 && optimized.length < idealChunkCount - 1) {
+          currentMerged = testMerged;
+        } else {
+          if (currentMerged) {
+            optimized.push(currentMerged);
+            currentMerged = chunk;
+          } else {
+            optimized.push(chunk);
+          }
+        }
+      }
+      
+      if (currentMerged) {
+        optimized.push(currentMerged);
+      }
+      
+      console.log('Word Munch: 优化后', optimized.length, '段，平均长度:', 
+        Math.round(optimized.reduce((sum, c) => sum + c.length, 0) / optimized.length));
+      
+      return optimized;
+    }
+
     // 切换分段模式
     toggleChunkedMode() {
       this.isChunkedMode = !this.isChunkedMode;
