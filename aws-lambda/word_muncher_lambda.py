@@ -18,7 +18,7 @@ SERVICE_TYPE = os.getenv('SERVICE_TYPE')
 
 # Cache configuration
 CACHE_ENABLED = os.getenv('CACHE_ENABLED', 'true').lower() == 'true'
-CACHE_TTL = int(os.getenv('CACHE_TTL', '604800'))  # 7 days in seconds
+CACHE_TTL = 604800   # 7 days in seconds
 
 def generate_cache_key(word: str) -> str:
     """Generate cache key based on word for optimal DynamoDB performance"""
