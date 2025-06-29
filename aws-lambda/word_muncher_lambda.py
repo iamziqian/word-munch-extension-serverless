@@ -102,16 +102,7 @@ def lambda_handler(event, context):
     """
     logger.info(f"[{PROJECT_NAME}] Processing event: {event}")
 
-    try:
-        # Check Authorization header if present
-        headers = event.get('headers', {}) or {}
-        authorization = headers.get('Authorization') or headers.get('authorization')
-        
-        if authorization:
-            logger.info(f"Authorization header present: {authorization[:20]}...")
-            # TODO: Add proper token validation here
-            # For now, just log the presence of the header
-        
+    try:        
         # Parse request from API Gateway（body(word + context) + headers）
         body = {}
         if 'body' in event and event['body'] is not None:
