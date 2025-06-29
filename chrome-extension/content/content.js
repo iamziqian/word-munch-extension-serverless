@@ -636,7 +636,15 @@ function sendMessageToBackground(message) {
         chrome.runtime.sendMessage(message, (response) => {
             // 检查是否有运行时错误
             if (chrome.runtime.lastError) {
+                // 特殊处理扩展上下文失效错误
+                if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+                    console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
+                    // 立即显示用户友好的错误信息
+                    showSimplificationError('扩展需要刷新，请刷新页面后重试');
+                    return;
+                }
                 console.error('Word Munch: 消息发送失败:', chrome.runtime.lastError.message);
+                showSimplificationError('连接扩展失败，请重试');
                 return;
             }
             
@@ -648,13 +656,23 @@ function sendMessageToBackground(message) {
                     console.log('Word Munch: 消息已被 background 接收');
                 } else if (response.error) {
                     console.error('Word Munch: Background 处理错误:', response.error);
+                    showSimplificationError(response.error);
                 }
             } else {
                 console.warn('Word Munch: 未收到 background 响应');
+                showSimplificationError('未收到响应，请重试');
             }
         });
     } catch (error) {
+        // 特殊处理扩展上下文失效异常
+        if (error.message && error.message.includes('Extension context invalidated')) {
+            console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
+            // 立即显示用户友好的错误信息
+            showSimplificationError('扩展需要刷新，请刷新页面后重试');
+            return;
+        }
         console.error('Word Munch: 发送消息异常:', error);
+        showSimplificationError('发送请求失败，请重试');
     }
 }
 
