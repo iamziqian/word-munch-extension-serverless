@@ -75,6 +75,12 @@
     width: 400px;
 }
 
+/* 确保浮动窗口在阅读模式上方显示 */
+#word-munch-reader-container .word-munch-floating-widget,
+.word-munch-floating-widget {
+    z-index: 2147483648 !important; /* 比阅读模式更高 */
+}
+
 /* === 统一的窗口头部样式 === */
 .wm-header {
     padding: var(--wm-spacing-md);
@@ -799,6 +805,11 @@
     cursor: pointer;
     transition: var(--wm-transition);
     position: relative;
+    /* 重要：确保文本可以被选择 */
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
 }
 
 #word-munch-reader-container .text-chunk:hover {
@@ -829,11 +840,24 @@
     font-size: var(--wm-font-size-xs);
     font-weight: 600;
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    /* 确保编号不阻挡文本选择 */
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 #word-munch-reader-container .chunk-text {
     margin-right: 40px;
     line-height: 1.8;
+    /* 确保文本内容可以被选择 */
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    position: relative;
+    z-index: 1;
 }
 
 /* === 响应式设计 === */
