@@ -174,6 +174,36 @@ class WordMunchStack(Stack):
         })
 
         # ============================================================================
+        # Lambda Functions - cognitive-profile
+        # ============================================================================
+        
+        # Cognitive Profile Lambda Function
+        self.cognitive_profile_lambda = _lambda.Function(
+            self, "CognitiveProfileLambda",
+            function_name=f"{self.project_name}-cognitive-profile-{self.env_name}",
+            description="Cognitive Profile Service for Text Comprehension Analysis",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            code=_lambda.Code.from_asset(lambda_dir),
+            handler="cognitive_profile_lambda.lambda_handler",
+            timeout=Duration.seconds(60),       
+            memory_size=1024,
+            role=self.lambda_execution_role,
+            environment={
+                "ENVIRONMENT": self.env_name,
+                "PROJECT_NAME": self.project_name,
+                "CACHE_TABLE_NAME": self.cache_table.table_name,
+                "CACHE_ENABLED": "true",
+                "SERVICE_TYPE": "cognitive-profile"
+            }
+        )
+        
+        # Add tags
+        self._apply_common_tags(self.cognitive_profile_lambda, {
+            "Service": "cognitive-profile",
+            "Purpose": "cognitive-profile"
+        })
+
+        # ============================================================================
         # API Gateway
         # 1. trigger lambda function
         # 2. traffic: CORS, Throttling, Validation
@@ -285,6 +315,46 @@ class WordMunchStack(Stack):
         )
         print("Created API endpoint: /concept-muncher")
 
+        # Cognitive Profile API Endpoint
+        cognitive_profile_resource = self.api.root.add_resource("cognitive-profile")
+        
+        # Integrate with Lambda function
+        cognitive_profile_integration = apigw.LambdaIntegration(
+            self.cognitive_profile_lambda
+        )
+
+        # POST method for cognitive-profile
+        cognitive_profile_resource.add_method(
+            "POST",
+            cognitive_profile_integration,
+            authorization_type=apigw.AuthorizationType.NONE, # no authorization
+            api_key_required=False,
+            request_models={
+                "application/json": apigw.Model.EMPTY_MODEL
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="400", # client error   
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="500", # server error
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                )
+            ]
+        )
+        print("Created API endpoint: /cognitive-profile")   
+
         # ============================================================================
         # Outputs
         # ============================================================================
@@ -313,7 +383,7 @@ class WordMunchStack(Stack):
             export_name=f"{self.project_name}-concept-muncher-url-{self.env_name}"
         )
         
-        # DynamoDB表名
+        # DynamoDB Table Name
         CfnOutput(
             self, "CacheTableName",
             value=self.cache_table.table_name,

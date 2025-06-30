@@ -4,13 +4,45 @@ import hashlib
 import time
 import re
 import os
+import threading
+import logging
 from typing import List, Dict, Tuple, Any
 from decimal import Decimal
-import logging
+
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+def record_cognitive_data_async(user_id: str, analysis_data: Dict):
+    """Asynchronously record cognitive data to the cognitive profile service"""
+    def make_request():
+        try:
+            # Call the cognitive profile Lambda
+            lambda_client = boto3.client('lambda', region_name='us-east-1')
+            
+            payload = {
+                'action': 'record_analysis',
+                'user_id': user_id,
+                'analysis_data': analysis_data
+            }
+            
+            # Invoke cognitive profile Lambda asynchronously
+            lambda_client.invoke(
+                FunctionName='cognitive-profile-lambda',  # Your cognitive Lambda function name
+                InvocationType='Event',  # Async invocation
+                Payload=json.dumps(payload)
+            )
+            
+            logger.info(f"Cognitive data sent for user {user_id}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to send cognitive data: {e}")
+    
+    # Run in background thread to not block response
+    thread = threading.Thread(target=make_request)
+    thread.daemon = True
+    thread.start()
 
 class TextComprehensionAnalyzer:
     def __init__(self):
@@ -727,6 +759,27 @@ def lambda_handler(event, context):
             except Exception as e:
                 logger.error(f"Claude feedback failed: {e}")
 
+        # Record cognitive data asynchronously
+        try:
+            user_id = extract_user_id_from_event(event)
+            if user_id:
+                # Prepare comprehensive analysis data for cognitive profiling
+                cognitive_analysis_data = {
+                    'original_text': original_text,
+                    'user_understanding': user_understanding,
+                    'context': context,
+                    'analysis_result': analysis_result,
+                    'url': body.get('url', ''),
+                    'title': body.get('title', ''),
+                    'timestamp': int(time.time())
+                }
+                
+                # Send to cognitive profile service (async, non-blocking)
+                record_cognitive_data_async(user_id, cognitive_analysis_data)
+        except Exception as e:
+            logger.warning(f"Cognitive data recording failed: {e}")
+            # Don't fail the main request if cognitive recording fails
+
         
         # Add performance metrics
         analysis_result['performance'] = {
@@ -756,3 +809,14 @@ def lambda_handler(event, context):
                 'message': str(e)
             })
         }
+    
+def extract_user_id_from_event(event):
+    """Extract user ID from event"""
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    if auth_header.startswith('Bearer '):
+        return 'user_' + hashlib.md5(auth_header.encode()).hexdigest()[:8]
+    
+    user_ip = headers.get('X-Forwarded-For', headers.get('X-Real-IP', 'unknown'))
+    return 'user_' + hashlib.md5(user_ip.encode()).hexdigest()[:8]

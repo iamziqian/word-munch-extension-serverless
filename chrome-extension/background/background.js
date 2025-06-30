@@ -6,6 +6,7 @@ console.log('=== Service Worker: Start ===');
 const CONFIG = {
     WORD_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/word-muncher',
     CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
+    COGNITIVE_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/cognitive-profile',
     MEMORY_CACHE_TIME: 3000,
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000,
     DB_NAME: 'WordMunchCache',
@@ -31,6 +32,296 @@ class ServiceWorkerState {
 
 const serviceState = new ServiceWorkerState();
 
+// === Cognitive Profile Manager ===
+class CognitiveProfileManager {
+    constructor() {
+        this.profileCache = new Map();
+        this.cognitiveAPI = CONFIG.COGNITIVE_API_ENDPOINT;
+    }
+
+    async handleCognitiveDashboardRequest(tabId) {
+        console.log('=== Background: handleCognitiveDashboardRequest called ===', tabId);
+        
+        try {
+            let userInfo = await UserManager.getUserInfo();
+            console.log('Background: getUserInfo result:', userInfo);
+            
+            // If no user info, use anonymous user
+            if (!userInfo) {
+                console.log('Background: No user login, using anonymous user');
+                userInfo = {
+                    userId: 'anonymous_user',
+                    email: 'anonymous@wordmunch.local',
+                    isAnonymous: true
+                };
+            }
+    
+            console.log('Background: Sending dashboard message to tab:', tabId, 'for user:', userInfo.userId);
+            
+            // Send message to content script to show dashboard
+            await chrome.tabs.sendMessage(tabId, {
+                type: 'SHOW_COGNITIVE_DASHBOARD',
+                userId: userInfo.userId || userInfo.email,
+                isAnonymous: userInfo.isAnonymous || false
+            });
+            
+            console.log('Background: Dashboard message sent successfully');
+    
+        } catch (error) {
+            console.error('Background: Failed to show cognitive dashboard:', error);
+            
+            // As fallback, use anonymous user
+            try {
+                console.log('Background: Error fallback - using anonymous user');
+                await chrome.tabs.sendMessage(tabId, {
+                    type: 'SHOW_COGNITIVE_DASHBOARD',
+                    userId: 'anonymous_user',
+                    isAnonymous: true
+                });
+                console.log('Background: Anonymous dashboard message sent successfully');
+            } catch (fallbackError) {
+                console.error('Background: Fallback also failed:', fallbackError);
+                await NotificationManager.showError('Unable to display cognitive analysis: ' + fallbackError.message);
+            }
+        }
+    }
+
+    async fetchCognitiveProfile(userId, days = 30) {
+        const cacheKey = `cognitive_profile_${userId}_${days}`;
+        
+        // Check cache (5 minute cache)
+        if (this.profileCache.has(cacheKey)) {
+            const cached = this.profileCache.get(cacheKey);
+            if (Date.now() - cached.timestamp < 300000) {
+                return cached.data;
+            }
+        }
+    
+        // If anonymous user, return demo data
+        if (userId === 'anonymous_user' || userId.includes('anonymous')) {
+            console.log('Service Worker: Using demo data for anonymous user');
+            const demoData = this.generateDemoData();
+            
+            // Cache demo data
+            this.profileCache.set(cacheKey, {
+                data: demoData,
+                timestamp: Date.now()
+            });
+            
+            return demoData;
+        }
+    
+        try {
+            const authToken = await UserManager.getAuthToken();
+            
+            const response = await fetch(this.cognitiveAPI, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authToken ? `Bearer ${authToken}` : ''
+                },
+                body: JSON.stringify({
+                    action: 'get_profile',
+                    user_id: userId,
+                    days: days
+                })
+            });
+    
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+    
+            const profileData = await response.json();
+            
+            // Cache result
+            this.profileCache.set(cacheKey, {
+                data: profileData,
+                timestamp: Date.now()
+            });
+    
+            return profileData;
+    
+        } catch (error) {
+            console.error('Service Worker: Failed to fetch cognitive profile, using demo data:', error);
+            
+            // If failed, return demo data
+            const demoData = this.generateDemoData();
+            this.profileCache.set(cacheKey, {
+                data: demoData,
+                timestamp: Date.now()
+            });
+            
+            return demoData;
+        }
+    }
+
+    async recordConceptAnalysis(userId, analysisData) {
+        try {
+            const authToken = await UserManager.getAuthToken();
+            
+            await fetch(this.cognitiveAPI, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authToken ? `Bearer ${authToken}` : ''
+                },
+                body: JSON.stringify({
+                    action: 'record_analysis',
+                    user_id: userId,
+                    analysis_data: analysisData
+                })
+            });
+
+            // Clear related cache
+            for (const key of this.profileCache.keys()) {
+                if (key.startsWith(`cognitive_profile_${userId}_`)) {
+                    this.profileCache.delete(key);
+                }
+            }
+
+            console.log('Service Worker: Cognitive analysis recorded successfully');
+
+        } catch (error) {
+            console.error('Service Worker: Failed to record cognitive analysis:', error);
+        }
+    }
+
+    generateDemoData() {
+        return {
+            total_analyses: 23,
+            days_covered: 15,
+            cognitive_radar: {
+                comprehension: 78,
+                coverage: 65,
+                depth: 82,
+                accuracy: 71,
+                analysis: 69,
+                synthesis: 75
+            },
+            strengths: [
+                'Strong analytical depth',
+                'Clear logical analysis', 
+                'High comprehension accuracy'
+            ],
+            weaknesses: [
+                'Information coverage needs improvement',
+                'Synthesis ability could be enhanced'
+            ],
+            bloom_distribution: {
+                'understand': 8,
+                'analyze': 7,
+                'apply': 5,
+                'evaluate': 3
+            },
+            personalized_suggestions: [
+                {
+                    icon: '🎯',
+                    title: 'Improve Coverage Completeness',
+                    description: 'You have room for improvement in understanding the full scope of articles',
+                    action: 'Try previewing the entire text first to build an overall framework before diving into details'
+                },
+                {
+                    icon: '🔍',
+                    title: 'Strengthen Synthesis Analysis',
+                    description: 'You can do more to compare and analyze different viewpoints',
+                    action: 'When reading, think more about how the author\'s viewpoint differs from other positions'
+                },
+                {
+                    icon: '📋',
+                    title: 'Maintain Deep Thinking Advantage',
+                    description: 'Your deep analysis ability is a major strength',
+                    action: 'Continue leveraging this advantage, and try more complex texts'
+                }
+            ],
+            error_patterns: {
+                'main_idea': { 
+                    label: 'Main Idea Understanding', 
+                    count: 3, 
+                    percentage: 35,
+                    suggestion: 'Focus more on the article\'s core arguments and thesis statements' 
+                },
+                'details': { 
+                    label: 'Detail Comprehension', 
+                    count: 5, 
+                    percentage: 55,
+                    suggestion: 'Pay attention to supporting evidence and specific examples' 
+                },
+                'logic': { 
+                    label: 'Logical Relationships', 
+                    count: 2, 
+                    percentage: 25,
+                    suggestion: 'Strengthen identification of causal, transitional, and other logical relationships' 
+                }
+            },
+            isDemo: true,
+            userId: 'anonymous_user'
+        };
+    }
+}
+
+const cognitiveManager = new CognitiveProfileManager()
+
+// Global function for context menu
+async function handleCognitiveDashboardRequest(tabId) {
+    await cognitiveManager.handleCognitiveDashboardRequest(tabId);
+}
+
+// === Context Menu Manager ===
+class ContextMenuManager {
+    static async initializeContextMenus() {
+        try {
+            // Check if contextMenus API is available
+            if (!chrome.contextMenus) {
+                console.log('Service Worker: Context menus API not available');
+                return;
+            }
+
+            // Clear existing menus first
+            await chrome.contextMenus.removeAll();
+            
+            // Create cognitive dashboard menu
+            chrome.contextMenus.create({
+                id: 'show-cognitive-dashboard',
+                title: 'View My Cognitive Growth',
+                contexts: ['page', 'selection']
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    console.error('Service Worker: Failed to create context menu:', chrome.runtime.lastError.message);
+                } else {
+                    console.log('Service Worker: Context menu created successfully');
+                }
+            });
+
+        } catch (error) {
+            console.error('Service Worker: Failed to initialize context menus:', error);
+        }
+    }
+
+    static setupContextMenuListener() {
+        try {
+            if (!chrome.contextMenus || !chrome.contextMenus.onClicked) {
+                console.log('Service Worker: Context menu click listener not available');
+                return;
+            }
+
+            chrome.contextMenus.onClicked.addListener((info, tab) => {
+                try {
+                    if (info.menuItemId === 'show-cognitive-dashboard' && tab && tab.id) {
+                        handleCognitiveDashboardRequest(tab.id);
+                    }
+                } catch (error) {
+                    console.error('Service Worker: Context menu click handler error:', error);
+                }
+            });
+
+            console.log('Service Worker: Context menu click listener added');
+
+        } catch (error) {
+            console.error('Service Worker: Failed to setup context menu listener:', error);
+        }
+    }
+}
+
 // === Service Worker lifecycle management ===
 class LifecycleManager {
     static async initialize() {
@@ -39,6 +330,11 @@ class LifecycleManager {
         try {
             await DatabaseManager.initializeIndexedDB();
             await this.setDefaultSettings();
+            
+            // Initialize context menus with error handling
+            await ContextMenuManager.initializeContextMenus();
+            ContextMenuManager.setupContextMenuListener();
+            
             console.log('Service Worker: Initialize completed');
         } catch (error) {
             console.error('Service Worker: Initialize failed:', error);
@@ -114,7 +410,52 @@ class MessageRouter {
                 case 'USER_LOGOUT':
                     await UserManager.handleUserLogout();
                     break;
-                    
+                
+                case 'GET_COGNITIVE_PROFILE':
+                    try {
+                        const userInfo = await UserManager.getUserInfo();
+                        if (!userInfo) {
+                            throw new Error('User not logged in');
+                        }
+                
+                        const profileData = await cognitiveManager.fetchCognitiveProfile(
+                            userInfo.userId || userInfo.email, 
+                            request.days || 30
+                        );
+                
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'COGNITIVE_PROFILE_DATA',
+                                data: profileData,
+                                requestId: request.requestId
+                            });
+                        } 
+                    } catch (error) {
+                        console.error('Service Worker: Failed to get cognitive profile:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'COGNITIVE_PROFILE_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    return;
+                
+                case 'RECORD_COGNITIVE_DATA':
+                    try {
+                        const userInfo = await UserManager.getUserInfo();
+                        if (userInfo && request.userId) {
+                            await cognitiveManager.recordConceptAnalysis(
+                                request.userId,
+                                request.data
+                            );
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Failed to record cognitive data:', error);
+                    }
+                    return;
+                
                 default:
                     console.log('Service Worker: Unknown message type:', request.type);
             }
@@ -322,6 +663,10 @@ class ConceptProcessor {
                 serviceState.activeRequests.delete(requestKey);
             }
             
+            this.recordCognitiveDataAsync(request, sender).catch(error => {
+                console.error('Service Worker: Failed to record cognitive data:', error);
+            });
+            
         } catch (error) {
             console.error('Service Worker: Concept analysis processing failed:', error);
             
@@ -343,6 +688,30 @@ class ConceptProcessor {
         }
         
         return Math.abs(hash).toString(36);
+    }
+
+    static async recordCognitiveDataAsync(request, sender) {
+        try {
+            const userInfo = await UserManager.getUserInfo();
+            if (!userInfo) return;
+    
+            const analysisData = {
+                original_text: request.original_text,
+                user_understanding: request.user_understanding,
+                context: request.context,
+                timestamp: Date.now(),
+                url: request.url,
+                title: request.title
+            };
+    
+            await cognitiveManager.recordConceptAnalysis(
+                userInfo.userId || userInfo.email, 
+                analysisData
+            );
+    
+        } catch (error) {
+            console.error('Service Worker: Cognitive data recording failed:', error);
+        }
     }
 }
 
@@ -885,9 +1254,72 @@ class StatsManager {
             counts.total++;
             
             await chrome.storage.sync.set({ conceptCounts: counts });
-            console.log('Service Worker: Concept analysis stats updated:', counts);
+            console.log('Service Worker: Concept stats updated:', counts);
+            
+            // Check cognitive milestones
+            await this.checkCognitiveMilestones();
+            
         } catch (error) {
-            console.error('Service Worker: Update concept analysis stats failed:', error);
+            console.error('Service Worker: Update concept stats failed:', error);
+        }
+    }
+
+    static async checkCognitiveMilestones() {
+        try {
+            const userInfo = await UserManager.getUserInfo();
+            if (!userInfo) return;
+    
+            const result = await chrome.storage.sync.get(['conceptCounts', 'cognitiveMilestones']);
+            const counts = result.conceptCounts || {};
+            const milestones = result.cognitiveMilestones || {};
+    
+            let newMilestones = false;
+    
+            // Check various milestones
+            if (counts.total >= 1 && !milestones.firstAnalysis) {
+                milestones.firstAnalysis = {
+                    achieved: true,
+                    date: new Date().toISOString(),
+                    title: 'Comprehension Novice',
+                    description: 'Completed first understanding analysis'
+                };
+                newMilestones = true;
+            }
+    
+            if (counts.total >= 10 && !milestones.explorer) {
+                milestones.explorer = {
+                    achieved: true,
+                    date: new Date().toISOString(),
+                    title: 'Reading Explorer',
+                    description: 'Analyzed 10+ articles'
+                };
+                newMilestones = true;
+            }
+    
+            if (counts.total >= 50 && !milestones.analyst) {
+                milestones.analyst = {
+                    achieved: true,
+                    date: new Date().toISOString(),
+                    title: 'Deep Thinker',
+                    description: 'Analyzed 50+ articles'
+                };
+                newMilestones = true;
+            }
+    
+            if (newMilestones) {
+                await chrome.storage.sync.set({ cognitiveMilestones: milestones });
+                
+                // Show achievement notification
+                const latestMilestone = Object.values(milestones).pop();
+                await NotificationManager.showNotification('🏆 Achievement Unlocked!', {
+                    type: 'basic',
+                    title: `🏆 ${latestMilestone.title}`,
+                    message: latestMilestone.description
+                });
+            }
+    
+        } catch (error) {
+            console.error('Service Worker: Failed to check cognitive milestones:', error);
         }
     }
 }
@@ -942,13 +1374,28 @@ class UserManager {
                 return {
                     userId: result.userId || result.userEmail,
                     email: result.userEmail,
-                    token: result.userToken
+                    token: result.userToken,
+                    isAnonymous: false
                 };
             }
-            return null;
+            
+            // Return anonymous user info instead of null
+            console.log('Service Worker: No user login, returning anonymous user info');
+            return {
+                userId: 'anonymous_user',
+                email: 'anonymous@wordmunch.local',
+                token: null,
+                isAnonymous: true
+            };
+            
         } catch (error) {
-            console.error('Service Worker: Get user info failed:', error);
-            return null;
+            console.error('Service Worker: Get user info failed, using anonymous:', error);
+            return {
+                userId: 'anonymous_user',
+                email: 'anonymous@wordmunch.local',
+                token: null,
+                isAnonymous: true
+            };
         }
     }
 
@@ -1015,7 +1462,6 @@ class TabManager {
     }
 }
 
-// === Event listener settings ===
 chrome.runtime.onInstalled.addListener((details) => {
     console.log('=== Service Worker: Extension installed ===', details.reason);
     LifecycleManager.initialize();

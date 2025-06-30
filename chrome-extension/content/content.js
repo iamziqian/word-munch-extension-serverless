@@ -259,18 +259,57 @@ class EventManager {
                 case 'WORD_SIMPLIFIED':
                     MessageHandlers.handleWordSimplified(message.word, message.result);
                     break;
+
                 case 'CONCEPT_ANALYZED':
                     MessageHandlers.handleConceptAnalyzed(message.original_text, message.result);
                     break;
+
                 case 'SIMPLIFY_ERROR':
                     MessageHandlers.handleSimplifyError(message.word, message.error);
                     break;
+                    
                 case 'CONCEPT_ANALYSIS_ERROR':
                     MessageHandlers.handleConceptAnalysisError(message.text, message.error);
                     break;
+
                 case 'SETTINGS_UPDATED':
                     MessageHandlers.handleSettingsUpdated(message.settings);
                     break;
+
+                case 'SHOW_COGNITIVE_DASHBOARD':
+                    console.log('Word Munch: Show cognitive dashboard for user:', message.userId);
+                    console.log('Word Munch: Is anonymous:', message.isAnonymous);
+                    
+                    // Ensure dashboard object exists
+                    if (typeof cognitiveDashboard === 'undefined') {
+                        console.error('Word Munch: cognitiveDashboard not defined');
+                        sendResponse({ error: 'Dashboard not initialized' });
+                        return;
+                    }
+                    
+                    // Delay execution, ensure DOM ready
+                    setTimeout(() => {
+                        try {
+                            cognitiveDashboard.showDashboard(message.userId, message.isAnonymous);
+                            console.log('Word Munch: Dashboard show method called');
+                        } catch (dashboardError) {
+                            console.error('Word Munch: Dashboard show failed:', dashboardError);
+                        }
+                    }, 100);
+                    
+                    sendResponse({ success: true });
+                    break;
+                    
+                case 'COGNITIVE_PROFILE_DATA':
+                    console.log('Word Munch: Received cognitive profile data');
+                    cognitiveDashboard.handleProfileData(message.data, message.requestId);
+                    break;
+                    
+                case 'COGNITIVE_PROFILE_ERROR':
+                    console.log('Word Munch: Cognitive profile error:', message.error);
+                    cognitiveDashboard.handleProfileError(message.error, message.requestId);
+                    break;
+                    
                 default:
                     console.log('Word Munch: Unknown message type:', message.type);
             }
@@ -869,7 +908,7 @@ class ContentTemplates {
         return `
             <div class="wm-header">
                 <div class="wm-header-text drag-handle">
-                    "${text.length > 25 ? text.substring(0, 25) + '...' : text}"
+                    📝 "${text.length > 25 ? text.substring(0, 25) + '...' : text}"
                 </div>
                 <button class="wm-close-btn">×</button>
             </div>
@@ -2005,6 +2044,11 @@ class MessageHandlers {
         if (loadingElement) {
             loadingElement.style.display = 'none';
         }
+
+        // Record cognitive data
+        CognitiveDataRecorder.recordAnalysisResult(original_text, result).catch(error => {
+            console.error('Word Munch: Failed to record cognitive data:', error);
+        });
     }
 
     static handleSimplifyError(word, error) {
@@ -2773,3 +2817,1661 @@ class SimpleReaderMode {
 
 // Initialize simple reader
 const simpleReader = new SimpleReaderMode();
+
+// === Cognitive Data Recorder ===
+class CognitiveDataRecorder {
+    static async recordAnalysisResult(originalText, result) {
+        try {
+            // Get user info from extension storage
+            const userInfo = await this.getUserInfo();
+            if (!userInfo) return;
+
+            // Build cognitive data
+            const cognitiveData = {
+                original_text: originalText,
+                analysis_result: result,
+                timestamp: Date.now(),
+                url: window.location.href,
+                title: document.title,
+                user_agent: navigator.userAgent
+            };
+
+            // Send to background script
+            chrome.runtime.sendMessage({
+                type: 'RECORD_COGNITIVE_DATA',
+                userId: userInfo.userId || userInfo.email,
+                data: cognitiveData
+            });
+
+        } catch (error) {
+            console.error('Word Munch: Failed to record cognitive data:', error);
+        }
+    }
+
+    static async getUserInfo() {
+        return new Promise((resolve) => {
+            chrome.storage.sync.get(['userEmail', 'userId', 'userToken'], (result) => {
+                if (result.userEmail) {
+                    resolve({
+                        userId: result.userId || result.userEmail,
+                        email: result.userEmail,
+                        token: result.userToken
+                    });
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+    }
+}
+
+class CognitiveDashboard {
+    constructor() {
+        this.isVisible = false;
+        this.dashboardContainer = null;
+        this.currentRequestId = null;
+        
+        // Demo data for testing (replace with real data later)
+        this.demoData = {
+            total_analyses: 47,
+            days_covered: 23,
+            average_score: 76,
+            
+            cognitive_radar: {
+                comprehension: 82,
+                coverage: 68,
+                depth: 85,
+                accuracy: 74,
+                analysis: 77,
+                synthesis: 71
+            },
+            
+            strengths: [
+                '🎯 Excellent deep analysis - you excel at understanding complex concepts',
+                '📊 Strong logical reasoning - great at identifying cause-and-effect relationships', 
+                '🔍 High attention to detail - rarely miss important supporting evidence'
+            ],
+            
+            weaknesses: [
+                '📖 Information coverage could be broader - sometimes miss the bigger picture',
+                '🔄 Synthesis skills need development - connecting ideas across different sections',
+                '⚡ Reading efficiency - could benefit from faster initial comprehension'
+            ],
+            
+            bloom_distribution: {
+                'remember': 2,
+                'understand': 15,
+                'apply': 8,
+                'analyze': 12,
+                'evaluate': 7,
+                'create': 3
+            },
+            
+            personalized_suggestions: [
+                {
+                    icon: '🎯',
+                    title: 'Strengthen Global Perspective',
+                    description: 'Your detail analysis is excellent, but you could benefit from better overall comprehension',
+                    action: 'Before diving into details, spend 30 seconds skimming the entire article to build a mental framework'
+                },
+                {
+                    icon: '🔗',
+                    title: 'Practice Information Synthesis', 
+                    description: 'Work on connecting different parts of the article and relating them to your existing knowledge',
+                    action: 'After reading each section, ask yourself: "How does this relate to what I just read?"'
+                },
+                {
+                    icon: '💡',
+                    title: 'Leverage Your Analytical Strength',
+                    description: 'Your deep analysis ability is a major asset - continue building on this foundation',
+                    action: 'Try analyzing more complex texts to further develop this strength'
+                }
+            ],
+            
+            error_patterns: {
+                'main_idea': { 
+                    label: 'Main Idea Understanding', 
+                    count: 3, 
+                    percentage: 28,
+                    suggestion: 'Focus on thesis statements and topic sentences in each paragraph' 
+                },
+                'details': { 
+                    label: 'Supporting Details', 
+                    count: 2, 
+                    percentage: 15,
+                    suggestion: 'Your detail comprehension is strong - maintain this level' 
+                },
+                'inference': { 
+                    label: 'Reading Between Lines', 
+                    count: 5, 
+                    percentage: 42,
+                    suggestion: 'Practice identifying implied meanings and author intentions' 
+                },
+                'structure': { 
+                    label: 'Text Organization', 
+                    count: 2, 
+                    percentage: 15,
+                    suggestion: 'Pay attention to how authors structure their arguments' 
+                }
+            },
+            
+            isDemo: true
+        };
+        
+        console.log('Word Munch: CognitiveDashboard initialized with enhanced demo data');
+    }
+
+    async showDashboard(userId, isAnonymous = false) {
+        console.log('Word Munch: Show cognitive dashboard for user:', userId, 'Anonymous:', isAnonymous);
+        
+        if (this.isVisible) {
+            this.hideDashboard();
+            return;
+        }
+
+        try {
+            this.createDashboard();
+            this.isVisible = true;
+            
+            // If the user is anonymous, directly display the demonstration data.
+            if (isAnonymous || userId === 'anonymous_user' || userId.includes('anonymous')) {
+                console.log('Word Munch: Using demo data for anonymous user');
+                
+                const demoData = {
+                    ...this.demoData,
+                    isDemo: true,
+                    isAnonymous: true
+                };
+                
+                setTimeout(() => {
+                    this.renderDashboard(demoData);
+                }, 300);
+            } else {
+                // Logged-in user requests real data
+                await this.requestCognitiveProfile(userId);
+            }
+            
+        } catch (error) {
+            console.error('Word Munch: Failed to show dashboard:', error);
+            this.isVisible = false;
+            if (this.dashboardContainer) {
+                this.dashboardContainer.remove();
+                this.dashboardContainer = null;
+            }
+        }
+    }
+
+    createDashboard() {
+        console.log('Word Munch: Creating dashboard DOM...');
+        
+        // Clean up any existing dashboard.
+        const existingDashboard = document.querySelector('.cognitive-dashboard-overlay');
+        if (existingDashboard) {
+            existingDashboard.remove();
+        }
+        
+        this.dashboardContainer = document.createElement('div');
+        this.dashboardContainer.className = 'cognitive-dashboard-overlay';
+        this.dashboardContainer.innerHTML = this.generateDashboardHTML();
+        
+        // Ensure styles are loaded.
+        this.addDashboardStyles();
+        
+        console.log('Word Munch: Appending dashboard to body...');
+        document.body.appendChild(this.dashboardContainer);
+        
+        console.log('Word Munch: Binding events...');
+        this.bindEvents();
+        
+        console.log('Word Munch: Triggering show animation...');
+        setTimeout(() => {
+            if (this.dashboardContainer) {
+                this.dashboardContainer.classList.add('show');
+                console.log('Word Munch: Show animation triggered');
+            }
+        }, 100);
+    }
+
+    async requestCognitiveProfile(userId, days = 30) {
+        this.currentRequestId = Math.random().toString(36).substr(2, 9);
+        
+        try {
+            chrome.runtime.sendMessage({
+                type: 'GET_COGNITIVE_PROFILE',
+                userId: userId,
+                days: days,
+                requestId: this.currentRequestId
+            });
+
+            setTimeout(() => {
+                if (this.currentRequestId && this.isVisible) {
+                    console.log('Word Munch: Request timeout, using demo data');
+                    this.renderDashboard(this.demoData);
+                }
+            }, 10000);
+
+        } catch (error) {
+            console.error('Word Munch: Failed to request cognitive profile:', error);
+            this.renderDashboard(this.demoData);
+        }
+    }
+
+    handleProfileData(data, requestId) {
+        if (requestId !== this.currentRequestId || !this.isVisible) {
+            return;
+        }
+
+        this.currentRequestId = null;
+        console.log('Word Munch: Received real cognitive profile data');
+        this.renderDashboard(data);
+    }
+
+    handleProfileError(error, requestId) {
+        if (requestId !== this.currentRequestId || !this.isVisible) {
+            return;
+        }
+
+        this.currentRequestId = null;
+        console.log('Word Munch: Profile error, using demo data:', error);
+        this.renderDashboard(this.demoData);
+    }
+
+    renderDashboard(data) {
+        if (!this.dashboardContainer) return;
+
+        console.log('Word Munch: Rendering dashboard with data:', data);
+        
+        const dashboardHTML = this.generateDashboardHTML(data);
+        this.dashboardContainer.innerHTML = dashboardHTML;
+        this.bindEvents();
+    }
+
+    generateDashboardHTML(data = this.demoData) {
+        const isAnonymous = data.isDemo || data.isAnonymous;
+        
+        return `
+            <div class="cognitive-dashboard-content">
+                <div class="dashboard-header">
+                    <h2>🧠 Cognitive Growth Analysis</h2>
+                    ${isAnonymous ? '<div class="experience-badge">🎯 Explore Edition</div>' : ''}
+                    <div class="dashboard-controls">
+                        <select class="time-range-select" ${isAnonymous ? 'disabled' : ''}>
+                            <option value="7">Past 7 days</option>
+                            <option value="30" selected>Past 30 days</option>
+                            <option value="90">Past 90 days</option>
+                        </select>
+                        <button class="dashboard-close-btn">×</button>
+                    </div>
+                </div>
+                
+                ${isAnonymous ? `
+                <div class="experience-notice">
+                    <div class="experience-content">
+                        <div class="experience-left">
+                            <div class="experience-icon">🌟</div>
+                            <div class="experience-text">
+                                <div class="experience-title">Personalized Cognitive Analysis Preview</div>
+                                <div class="experience-subtitle">
+                                    Based on real user behavior patterns • 
+                                    <a href="#" class="upgrade-link">
+                                        Start tracking your real progress →
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="experience-right">
+                            <div class="value-points">
+                                <div class="value-point">📈 Real-time progress</div>
+                                <div class="value-point">🎯 Personalized suggestions</div>
+                                <div class="value-point">🏆 Achievement tracking</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="dashboard-tabs">
+                    <button class="dashboard-tab active" data-tab="overview">📊 Cognitive Overview</button>
+                    <button class="dashboard-tab" data-tab="growth">📈 Growth Journey</button>
+                    <button class="dashboard-tab" data-tab="insights">💡 Intelligent Insights</button>
+                    ${isAnonymous ? '<button class="dashboard-tab special-tab" data-tab="unlock">🚀 Unlock Full Version</button>' : ''}
+                </div>
+
+                <div class="dashboard-body">
+                    <div class="dashboard-tab-content active" data-content="overview">
+                        ${this.generateEnhancedOverviewTab(data)}
+                    </div>
+                    <div class="dashboard-tab-content" data-content="growth">
+                        ${this.generateEnhancedGrowthTab(data)}
+                    </div>
+                    <div class="dashboard-tab-content" data-content="insights">
+                        ${this.generateEnhancedInsightsTab(data)}
+                    </div>
+                    ${isAnonymous ? `
+                    <div class="dashboard-tab-content" data-content="unlock">
+                        ${this.generateUnlockTab()}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    generateEnhancedOverviewTab(data) {
+        return `
+            <div class="overview-hero">
+                <div class="hero-message">
+                    <div class="hero-icon">🎯</div>
+                    <div class="hero-text">
+                        <h3>Your Cognitive Ability Portrait</h3>
+                        <p>Based on advanced understanding analysis algorithms, we present a comprehensive view of your cognitive development</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overview-stats enhanced">
+                <div class="stat-card primary">
+                    <div class="stat-icon">📚</div>
+                    <div class="stat-content">
+                        <div class="stat-number">${data.total_analyses}</div>
+                        <div class="stat-label">Deep Analysis</div>
+                        <div class="stat-insight">Your learning is very dedicated!</div>
+                    </div>
+                </div>
+                <div class="stat-card secondary">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-content">
+                        <div class="stat-number">${Math.round(data.cognitive_radar.comprehension)}%</div>
+                        <div class="stat-label">Understanding Accuracy</div>
+                        <div class="stat-insight">Surpasses 70% of users</div>
+                    </div>
+                </div>
+                <div class="stat-card tertiary">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-content">
+                        <div class="stat-number">${data.days_covered}</div>
+                        <div class="stat-label">Active Days</div>
+                        <div class="stat-insight">Keep it up!</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cognitive-radar-section">
+                <div class="section-header">
+                    <h3>🎯 Cognitive Ability Radar</h3>
+                    <div class="section-subtitle">Multi-dimensional analysis of your learning characteristics</div>
+                </div>
+                <div class="radar-container">
+                    ${this.generateRadarChart(data.cognitive_radar)}
+                    <div class="radar-insights">
+                        <div class="insight-item strength">
+                            <div class="insight-label">Strongest Point</div>
+                            <div class="insight-value">Deep analysis ${data.cognitive_radar.depth}%</div>
+                        </div>
+                        <div class="insight-item opportunity">
+                            <div class="insight-label">Improvement Point</div>
+                            <div class="insight-value">Information coverage ${data.cognitive_radar.coverage}%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="growth-preview">
+                <div class="preview-header">
+                    <h4>🚀 Want to see more?</h4>
+                    <p>Unlock the full version, get personalized learning paths and real-time progress tracking</p>
+                </div>
+                <div class="preview-features">
+                    <div class="feature-item">
+                        <div class="feature-icon">📈</div>
+                        <div class="feature-text">Detailed progress curve</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">🎯</div>
+                        <div class="feature-text">AI learning suggestions</div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">🏆</div>
+                        <div class="feature-text">Achievement system</div>
+                    </div>
+                </div>
+                <button class="preview-cta">
+                    Start my cognitive growth journey →
+                </button>
+            </div>
+        `;
+    }
+
+    generateEnhancedGrowthTab(data) {
+        return `
+            <div class="bloom-section">
+                <h3>🎓 Cognitive Level Distribution (Bloom's Taxonomy)</h3>
+                <div class="bloom-distribution">
+                    ${Object.entries(data.bloom_distribution).map(([level, count]) => {
+                        const percentage = Math.round((count / data.total_analyses) * 100);
+                        const levelNames = {
+                            'understand': 'Understand',
+                            'analyze': 'Analyze', 
+                            'apply': 'Apply',
+                            'evaluate': 'Evaluate',
+                            'create': 'Create',
+                            'remember': 'Remember'
+                        };
+                        return `
+                            <div class="bloom-item">
+                                <div class="bloom-label">${levelNames[level] || level}</div>
+                                <div class="bloom-bar">
+                                    <div class="bloom-fill" style="width: ${percentage}%;"></div>
+                                </div>
+                                <div class="bloom-value">${count} (${percentage}%)</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="milestones-section">
+                <h3>🏆 Growth Milestones</h3>
+                <div class="milestones">
+                    ${this.generateMilestones(data)}
+                </div>
+            </div>
+        `;
+    }
+
+    generateMilestones(data) {
+        const milestones = [
+            {
+                icon: '🎯',
+                title: 'Newbie',
+                description: 'Complete the first understanding analysis',
+                achieved: data.total_analyses >= 1
+            },
+            {
+                icon: '📚',
+                title: 'Explorer',
+                description: 'Analyzed 10+ articles',
+                achieved: data.total_analyses >= 10
+            },
+            {
+                icon: '🧠',
+                title: 'Deep Thinker',
+                description: 'Average understanding accuracy reaches 80%',
+                achieved: data.cognitive_radar.comprehension >= 80
+            },
+            {
+                icon: '🏆',
+                title: 'Master',
+                description: 'High-accuracy analysis of 50+ articles',
+                achieved: data.total_analyses >= 50 && data.cognitive_radar.comprehension >= 85
+            }
+        ];
+
+        return milestones.map(milestone => `
+            <div class="milestone ${milestone.achieved ? 'achieved' : 'pending'}">
+                <div class="milestone-icon">${milestone.icon}</div>
+                <div class="milestone-content">
+                    <div class="milestone-title">${milestone.title}</div>
+                    <div class="milestone-desc">${milestone.description}</div>
+                </div>
+                <div class="milestone-status">
+                    ${milestone.achieved ? '✅' : '⏳'}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    generateEnhancedInsightsTab(data) {
+        return `
+            <div class="suggestions-section">
+                <h3>💡 Personalized Improvement Suggestions</h3>
+                <div class="suggestions">
+                    ${data.personalized_suggestions.map((suggestion, index) => `
+                        <div class="suggestion-card">
+                            <div class="suggestion-icon">${suggestion.icon}</div>
+                            <div class="suggestion-content">
+                                <div class="suggestion-title">${suggestion.title}</div>
+                                <div class="suggestion-desc">${suggestion.description}</div>
+                                <div class="suggestion-action">${suggestion.action}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="error-patterns-section">
+                <h3>🔍 Understanding Blind Spots Analysis</h3>
+                <div class="error-patterns">
+                    ${Object.entries(data.error_patterns).map(([type, pattern], index) => `
+                        <div class="error-pattern">
+                            <div class="error-header">
+                                <span class="error-type">${pattern.label}</span>
+                                <span class="error-count">${pattern.count} times</span>
+                            </div>
+                            <div class="error-bar">
+                                <div class="error-fill" style="width: ${pattern.percentage}%;"></div>
+                            </div>
+                            <div class="error-suggestion">${pattern.suggestion}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    generateUnlockTab() {
+        return `
+            <div class="unlock-section">
+                <div class="unlock-hero">
+                    <div class="unlock-animation">
+                        <div class="unlock-icon">🚀</div>
+                    </div>
+                    <h3>Unlock Your Cognitive Growth Potential</h3>
+                    <p>From now on, let every reading become a step towards growth</p>
+                </div>
+                
+                <div class="upgrade-cta-section">
+                    <div class="cta-content">
+                        <div class="cta-text">
+                            <h4>Start Your Cognitive Growth Journey Now</h4>
+                            <p>Join thousands of users and become smarter together</p>
+                        </div>
+                        <div class="cta-actions">
+                            <button class="primary-cta">
+                                🚀 Start for Free
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    generateRadarChart(radar) {
+        const skills = [
+            { name: 'comprehension', value: radar.comprehension },
+            { name: 'coverage', value: radar.coverage },
+            { name: 'depth', value: radar.depth },
+            { name: 'accuracy', value: radar.accuracy },
+            { name: 'analysis', value: radar.analysis },
+            { name: 'synthesis', value: radar.synthesis }
+        ];
+
+        const centerX = 120;
+        const centerY = 120;
+        const radius = 80;
+        
+        const points = skills.map((skill, index) => {
+            const angle = (index * 60 - 90) * Math.PI / 180;
+            const distance = (skill.value / 100) * radius;
+            const x = centerX + Math.cos(angle) * distance;
+            const y = centerY + Math.sin(angle) * distance;
+            return `${x},${y}`;
+        }).join(' ');
+
+        const gridLevels = [20, 40, 60, 80, 100];
+        const gridLines = gridLevels.map(level => {
+            const levelPoints = skills.map((skill, index) => {
+                const angle = (index * 60 - 90) * Math.PI / 180;
+                const distance = (level / 100) * radius;
+                const x = centerX + Math.cos(angle) * distance;
+                const y = centerY + Math.sin(angle) * distance;
+                return `${x},${y}`;
+            }).join(' ');
+            return `<polygon points="${levelPoints}" fill="none" stroke="#e5e7eb" stroke-width="1"/>`;
+        }).join('');
+
+        const axisLines = skills.map((skill, index) => {
+            const angle = (index * 60 - 90) * Math.PI / 180;
+            const endX = centerX + Math.cos(angle) * radius;
+            const endY = centerY + Math.sin(angle) * radius;
+            return `<line x1="${centerX}" y1="${centerY}" x2="${endX}" y2="${endY}" stroke="#d1d5db" stroke-width="1"/>`;
+        }).join('');
+
+        const labels = skills.map((skill, index) => {
+            const angle = (index * 60 - 90) * Math.PI / 180;
+            const labelDistance = radius + 25;
+            const x = centerX + Math.cos(angle) * labelDistance;
+            const y = centerY + Math.sin(angle) * labelDistance;
+            
+            return `
+                <text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" 
+                      font-size="11" fill="#374151" font-weight="500">
+                    ${skill.name}
+                </text>
+                <text x="${x}" y="${y + 15}" text-anchor="middle" dominant-baseline="middle" 
+                      font-size="10" fill="#6b7280" font-weight="600">
+                    ${skill.value}%
+                </text>
+            `;
+        }).join('');
+
+        return `
+            <svg width="240" height="240" class="radar-svg">
+                ${gridLines}
+                ${axisLines}
+                <polygon points="${points}" fill="#6366f1" fill-opacity="0.2" stroke="#6366f1" stroke-width="1.5"/>
+                ${skills.map((skill, index) => {
+                    const angle = (index * 60 - 90) * Math.PI / 180;
+                    const distance = (skill.value / 100) * radius;
+                    const x = centerX + Math.cos(angle) * distance;
+                    const y = centerY + Math.sin(angle) * distance;
+                    return `<circle cx="${x}" cy="${y}" r="3" fill="#6366f1"/>`;
+                }).join('')}
+                ${labels}
+            </svg>
+        `;
+    }
+
+    bindEvents() {
+        if (!this.dashboardContainer) return;
+        
+        // Click outside to close
+        this.dashboardContainer.addEventListener('click', (e) => {
+            if (e.target === this.dashboardContainer) {
+                this.hideDashboard();
+            }
+        });
+
+        // ESC key to close
+        const handleEsc = (e) => {
+            if (e.key === 'Escape' && this.isVisible) {
+                this.hideDashboard();
+                document.removeEventListener('keydown', handleEsc);
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+
+        // Close button
+        const closeBtn = this.dashboardContainer.querySelector('.dashboard-close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hideDashboard());
+        }
+
+        // Tab switching
+        const tabs = this.dashboardContainer.querySelectorAll('.dashboard-tab');
+        const contents = this.dashboardContainer.querySelectorAll('.dashboard-tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                
+                tabs.forEach(t => t.classList.remove('active'));
+                contents.forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                const targetContent = this.dashboardContainer.querySelector(`[data-content="${targetTab}"]`);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            });
+        });
+
+        // CTA button events
+        const ctaButtons = this.dashboardContainer.querySelectorAll('.preview-cta, .primary-cta, .upgrade-link');
+        ctaButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                alert('🚧 Registration feature under development, stay tuned!');
+            });
+        });
+    }
+
+    hideDashboard() {
+        if (!this.isVisible) return;
+
+        this.isVisible = false;
+        this.currentRequestId = null;
+        
+        if (this.dashboardContainer) {
+            this.dashboardContainer.classList.add('hide');
+            
+            setTimeout(() => {
+                if (this.dashboardContainer && this.dashboardContainer.parentNode) {
+                    this.dashboardContainer.parentNode.removeChild(this.dashboardContainer);
+                    this.dashboardContainer = null;
+                }
+            }, 300);
+        }
+    }
+
+    addDashboardStyles() {
+        if (document.getElementById('cognitive-dashboard-styles')) return;
+    
+        const styles = document.createElement('style');
+        styles.id = 'cognitive-dashboard-styles';
+        styles.textContent = `
+            /* 🎨 Cognitive Dashboard */
+            
+            .cognitive-dashboard-overlay {
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(8px);
+                z-index: 2147483647;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0;
+                visibility: hidden;
+                transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .cognitive-dashboard-overlay.show { 
+                opacity: 1; 
+                visibility: visible; 
+            }
+            .cognitive-dashboard-overlay.hide { 
+                opacity: 0; 
+                visibility: hidden; 
+                transform: scale(0.96); 
+            }
+            
+            .cognitive-dashboard-content {
+                width: 90vw; 
+                max-width: 900px; 
+                height: 88vh; 
+                max-height: 720px;
+                background: white; 
+                border-radius: 16px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+                display: flex; 
+                flex-direction: column;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+                transform: scale(0.95); 
+                transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                overflow: hidden;
+            }
+            .cognitive-dashboard-overlay.show .cognitive-dashboard-content { 
+                transform: scale(1); 
+            }
+            
+            /* 🎯 Header - Indigo */ 
+            .dashboard-header {
+                padding: 20px 24px;
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                color: white;
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center;
+                border-radius: 16px 16px 0 0;
+                position: relative;
+            }
+            
+            .dashboard-header h2 { 
+                margin: 0; 
+                font-size: 18px; 
+                font-weight: 600;
+                letter-spacing: -0.01em;
+            }
+            
+            .experience-badge {
+                background: rgba(255, 255, 255, 0.2);
+                color: white;
+                padding: 4px 12px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 500;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                margin-left: 12px;
+            }
+            
+            .dashboard-controls { 
+                display: flex; 
+                align-items: center; 
+                gap: 12px; 
+            }
+            
+            .time-range-select {
+                padding: 6px 12px;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                font-size: 12px;
+                cursor: pointer;
+                outline: none;
+            }
+            .time-range-select:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            
+            .dashboard-close-btn {
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                font-size: 18px;
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s ease;
+            }
+            .dashboard-close-btn:hover { 
+                background: rgba(255, 255, 255, 0.2); 
+            }
+            
+            /* 💡 Demo Notice - Soft orange banner */
+            .experience-notice {
+                background: #f59e0b;
+                padding: 16px 24px;
+                color: white;
+                font-size: 13px;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            }
+            
+            .experience-content {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+            }
+            
+            .experience-left {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                flex: 1;
+            }
+            
+            .experience-icon {
+                font-size: 16px;
+            }
+            
+            .experience-title {
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 2px;
+            }
+            
+            .experience-subtitle {
+                font-size: 12px;
+                opacity: 0.95;
+            }
+            
+            .upgrade-link {
+                color: #fed7aa;
+                text-decoration: none;
+                font-weight: 500;
+                border-bottom: 1px solid transparent;
+                transition: border-color 0.2s ease;
+            }
+            .upgrade-link:hover {
+                border-bottom-color: #fed7aa;
+            }
+            
+            .experience-right {
+                display: flex;
+                gap: 8px;
+            }
+            
+            .value-point {
+                background: rgba(255, 255, 255, 0.15);
+                padding: 4px 8px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 500;
+                white-space: nowrap;
+            }
+            
+            /* 📊 Tabs - Simple tab design */
+            .dashboard-tabs {
+                display: flex;
+                background: #f8fafc;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 0 24px;
+            }
+            
+            .dashboard-tab {
+                flex: 1;
+                padding: 12px 16px;
+                border: none;
+                background: none;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 500;
+                color: #64748b;
+                border-bottom: 2px solid transparent;
+                transition: all 0.2s ease;
+                text-align: center;
+            }
+            .dashboard-tab:hover { 
+                color: #475569;
+                background: rgba(99, 102, 241, 0.04);
+            }
+            .dashboard-tab.active { 
+                color: #6366f1;
+                background: white;
+                border-bottom-color: #6366f1;
+                font-weight: 600;
+            }
+            
+            .special-tab {
+                background: #fb7185;
+                color: white !important;
+                font-weight: 600 !important;
+                border-radius: 8px 8px 0 0;
+                margin: 2px;
+                position: relative;
+                overflow: hidden;
+            }
+            .special-tab::after {
+                content: '✨';
+                position: absolute;
+                right: 8px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 10px;
+            }
+            
+            /* 📄 Content Area */
+            .dashboard-body { 
+                flex: 1; 
+                overflow-y: auto; 
+                background: #fafbfc;
+            }
+            
+            .dashboard-tab-content { 
+                padding: 24px; 
+                display: none; 
+                animation: fadeIn 0.3s ease;
+            }
+            .dashboard-tab-content.active { 
+                display: block; 
+            }
+            
+            @keyframes fadeIn { 
+                from { opacity: 0; transform: translateY(8px); } 
+                to { opacity: 1; transform: translateY(0); } 
+            }
+            
+            /* 🎯 Overview Stats - Card design */
+            .overview-hero {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+            
+            .hero-message {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .hero-icon {
+                font-size: 24px;
+                background: #f1f5f9;
+                width: 48px;
+                height: 48px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .hero-text h3 {
+                margin: 0 0 4px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .hero-text p {
+                margin: 0;
+                font-size: 13px;
+                color: #64748b;
+                line-height: 1.4;
+            }
+            
+            .overview-stats.enhanced {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+            
+            .stat-card {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                border: 1px solid #e2e8f0;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .stat-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+            }
+            
+            .stat-card.primary::before {
+                background: linear-gradient(90deg, #6366f1, #4f46e5);
+            }
+            .stat-card.secondary::before {
+                background: linear-gradient(90deg, #06b6d4, #0891b2);
+            }
+            .stat-card.tertiary::before {
+                background: linear-gradient(90deg, #10b981, #059669);
+            }
+            
+            .stat-card:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                border-color: #cbd5e1;
+            }
+            
+            .stat-icon {
+                font-size: 20px;
+                width: 40px;
+                height: 40px;
+                background: #f1f5f9;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            
+            .stat-content {
+                flex: 1;
+            }
+            
+            .stat-number {
+                font-size: 24px;
+                font-weight: 700;
+                color: #1e293b;
+                margin-bottom: 2px;
+                line-height: 1;
+            }
+            
+            .stat-label {
+                font-size: 13px;
+                color: #64748b;
+                font-weight: 500;
+                margin-bottom: 2px;
+            }
+            
+            .stat-insight {
+                font-size: 11px;
+                color: #16a34a;
+                font-weight: 500;
+            }
+            
+            /* 🎯 Radar Chart Section */
+            .cognitive-radar-section {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .section-header {
+                margin-bottom: 16px;
+            }
+            
+            .section-header h3 {
+                margin: 0 0 4px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .section-subtitle {
+                font-size: 13px;
+                color: #64748b;
+            }
+            
+            .radar-container {
+                display: flex;
+                align-items: center;
+                gap: 24px;
+            }
+            
+            .radar-chart {
+                background: #f8fafc;
+                border-radius: 12px;
+                padding: 16px;
+                flex-shrink: 0;
+            }
+            
+            .radar-insights {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .insight-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .insight-item.strength {
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                border-color: #bbf7d0;
+            }
+            
+            .insight-item.opportunity {
+                background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                border-color: #fcd34d;
+            }
+            
+            .insight-label {
+                font-size: 12px;
+                color: #64748b;
+                font-weight: 500;
+            }
+            
+            .insight-value {
+                font-size: 13px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            /* 🚀 Growth Preview */
+            .growth-preview {
+                background: #fef3c7;
+                border-radius: 12px;
+                padding: 20px;
+                text-align: center;
+                border: 1px solid #fcd34d;
+            }
+            
+            .preview-header h4 {
+                margin: 0 0 4px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #92400e;
+            }
+            
+            .preview-header p {
+                margin: 0 0 16px 0;
+                font-size: 13px;
+                color: #b45309;
+            }
+            
+            .preview-features {
+                display: flex;
+                justify-content: center;
+                gap: 16px;
+                margin: 16px 0;
+            }
+            
+            .feature-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 6px;
+            }
+            
+            .feature-icon {
+                font-size: 16px;
+                width: 32px;
+                height: 32px;
+                background: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            
+            .feature-text {
+                font-size: 11px;
+                font-weight: 500;
+                color: #92400e;
+            }
+            
+            .preview-cta {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .preview-cta:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            }
+            
+            /* 📊 Bloom Distribution */
+            .bloom-section {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .bloom-section h3 {
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .bloom-distribution {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .bloom-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .bloom-label {
+                font-weight: 500;
+                color: #475569;
+                min-width: 60px;
+                font-size: 13px;
+            }
+            
+            .bloom-bar {
+                flex: 1;
+                height: 6px;
+                background: #f1f5f9;
+                border-radius: 3px;
+                overflow: hidden;
+            }
+            
+            .bloom-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #6366f1, #4f46e5);
+                border-radius: 3px;
+                transition: width 0.8s ease;
+            }
+            
+            .bloom-value {
+                font-size: 12px;
+                color: #64748b;
+                font-weight: 500;
+                min-width: 50px;
+                text-align: right;
+            }
+            
+            /* 🏆 Milestones */
+            .milestones-section {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .milestones-section h3 {
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .milestones {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .milestone {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 16px;
+                border-radius: 10px;
+                border: 1px solid #e2e8f0;
+                transition: all 0.2s ease;
+            }
+            
+            .milestone.achieved {
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                border-color: #bbf7d0;
+            }
+            
+            .milestone.pending {
+                background: #f8fafc;
+                opacity: 0.7;
+            }
+            
+            .milestone-icon {
+                font-size: 20px;
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 10px;
+                background: white;
+                border: 1px solid #e2e8f0;
+                flex-shrink: 0;
+            }
+            
+            .milestone.achieved .milestone-icon {
+                background: #dcfce7;
+                border-color: #bbf7d0;
+            }
+            
+            .milestone-content {
+                flex: 1;
+            }
+            
+            .milestone-title {
+                font-weight: 600;
+                font-size: 14px;
+                color: #1e293b;
+                margin-bottom: 2px;
+            }
+            
+            .milestone-desc {
+                font-size: 12px;
+                color: #64748b;
+            }
+            
+            .milestone-status {
+                font-size: 16px;
+            }
+            
+            /* 💡 Suggestions */
+            .suggestions-section {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .suggestions-section h3 {
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .suggestions {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .suggestion-card {
+                display: flex;
+                gap: 12px;
+                padding: 16px;
+                background: linear-gradient(135deg, #eef2ff 0%, #dbeafe 100%) !important;
+                border-radius: 10px;
+                color: #373a53 !important;
+                transition: transform 0.2s ease;
+            }
+            
+            .suggestion-card:hover {
+                transform: translateY(-1px);
+            }
+            
+            .suggestion-icon {
+                font-size: 18px;
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                flex-shrink: 0;
+            }
+            
+            .suggestion-content {
+                flex: 1;
+            }
+            
+            .suggestion-title {
+                font-weight: 600;
+                font-size: 14px;
+                margin-bottom: 4px;
+            }
+            
+            .suggestion-desc {
+                font-size: 12px;
+                opacity: 0.95;
+                margin-bottom: 8px;
+                line-height: 1.4;
+            }
+            
+            .suggestion-action {
+                font-size: 11px;
+                padding: 4px 8px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+                display: inline-block;
+                font-weight: 500;
+            }
+            
+            /* 🔍 Error Patterns */
+            .error-patterns-section {
+                background: white;
+                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .error-patterns-section h3 {
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .error-patterns {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .error-pattern {
+                padding: 16px;
+                background: #fef2f2;
+                border-radius: 10px;
+                border-left: 3px solid #ef4444;
+            }
+            
+            .error-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            
+            .error-type {
+                font-weight: 600;
+                color: #dc2626;
+                font-size: 13px;
+            }
+            
+            .error-count {
+                font-size: 11px;
+                color: #64748b;
+                background: white;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-weight: 500;
+            }
+            
+            .error-bar {
+                height: 4px;
+                background: #fecaca;
+                border-radius: 2px;
+                margin-bottom: 8px;
+                overflow: hidden;
+            }
+            
+            .error-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #ef4444, #f87171);
+                border-radius: 2px;
+                transition: width 0.8s ease;
+            }
+            
+            .error-suggestion {
+                font-size: 12px;
+                color: #7f1d1d;
+                line-height: 1.4;
+            }
+            
+            /* 🚀 Unlock Section */
+            .unlock-section {
+                padding: 32px 24px;
+                text-align: center;
+            }
+            
+            .unlock-hero {
+                margin-bottom: 24px;
+            }
+            
+            .unlock-animation {
+                position: relative;
+                margin-bottom: 16px;
+            }
+            
+            .unlock-icon {
+                font-size: 32px;
+                display: inline-block;
+                animation: float 3s ease-in-out infinite;
+            }
+            
+            @keyframes float {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-6px); }
+            }
+            
+            .unlock-hero h3 {
+                margin: 0 0 8px 0;
+                font-size: 18px;
+                font-weight: 700;
+                color: #1e293b;
+            }
+            
+            .unlock-hero p {
+                margin: 0;
+                font-size: 14px;
+                color: #64748b;
+            }
+            
+            .upgrade-cta-section {
+                background: white;
+                border-radius: 12px;
+                padding: 24px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .cta-text h4 {
+                margin: 0 0 4px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #1e293b;
+            }
+            
+            .cta-text p {
+                margin: 0 0 16px 0;
+                font-size: 13px;
+                color: #64748b;
+            }
+            
+            .primary-cta {
+                background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .primary-cta:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            }
+            
+            /* 📱 Responsive Design */
+            @media (max-width: 768px) {
+                .cognitive-dashboard-content {
+                    width: 95vw;
+                    height: 92vh;
+                    border-radius: 12px;
+                }
+                
+                .dashboard-header {
+                    padding: 16px 20px;
+                    border-radius: 12px 12px 0 0;
+                }
+                
+                .dashboard-header h2 {
+                    font-size: 16px;
+                }
+                
+                .dashboard-tab-content {
+                    padding: 20px 16px;
+                }
+                
+                .overview-stats.enhanced {
+                    grid-template-columns: 1fr;
+                    gap: 12px;
+                }
+                
+                .radar-container {
+                    flex-direction: column;
+                    gap: 16px;
+                }
+                
+                .preview-features {
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 12px;
+                }
+                
+                .experience-content {
+                    flex-direction: column;
+                    text-align: center;
+                    gap: 12px;
+                }
+                
+                .value-point {
+                    font-size: 10px;
+                }
+            }
+        `;
+        
+        document.head.appendChild(styles);
+        console.log('🎨 Enhanced dashboard styles applied');
+    }
+}
+
+window.cognitiveDashboard = new CognitiveDashboard();
+
+console.log('Word Munch: CognitiveDashboard loaded');
