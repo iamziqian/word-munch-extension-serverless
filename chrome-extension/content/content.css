@@ -1,4 +1,4 @@
-/* Content Script 样式文件 - 极简版 */
+/* Content Script 样式文件 */
 
 /* === 浮动窗口样式 === */
 .word-munch-floating-widget {
@@ -742,4 +742,680 @@
     background: linear-gradient(135deg, #667eea, #764ba2);
     transform: scale(1.1);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* === Concept Muncher 浮动窗口样式 === */
+
+/* 理解分析模式的头部样式 */
+.concept-header {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important;
+    color: white !important;
+}
+
+.concept-content {
+    padding: 16px !important;
+}
+
+/* 选中文本显示区域 */
+.concept-selected-text {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.concept-text-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.concept-text-content {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #334155;
+    max-height: 60px;
+    overflow-y: auto;
+}
+
+/* 理解输入区域 */
+.concept-input-section {
+    margin-bottom: 16px;
+}
+
+.concept-input-label {
+    font-size: 13px;
+    color: #374151;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.concept-understanding-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.4;
+    resize: vertical;
+    min-height: 70px;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.concept-understanding-input:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.concept-understanding-input::placeholder {
+    color: #9ca3af;
+}
+
+/* 上下文信息区域 */
+.concept-context-section {
+    margin-bottom: 16px;
+}
+
+.concept-context-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.concept-context-content {
+    font-size: 12px;
+    color: #6b7280;
+    background: #f9fafb;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    max-height: 40px;
+    overflow-y: auto;
+    line-height: 1.3;
+}
+
+/* 操作按钮区域 */
+.concept-buttons {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.concept-analyze-btn {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important;
+    color: white !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    min-width: 140px !important;
+}
+
+.concept-analyze-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+    transform: translateY(-1px) !important;
+}
+
+.concept-analyze-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* 加载状态 */
+.concept-loading {
+    text-align: center;
+    padding: 16px;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+/* 分析结果区域 */
+.concept-results {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 16px;
+    margin-top: 16px;
+}
+
+/* 分数展示区域 */
+.concept-score-section {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.concept-score-card {
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-left: 4px solid #0ea5e9;
+}
+
+.concept-score-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.concept-score-label {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.concept-stats {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.concept-stat {
+    background: #f8fafc;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+/* 高亮显示区域 */
+.concept-highlight-section {
+    margin-bottom: 16px;
+}
+
+.concept-legend {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.concept-legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    color: #64748b;
+}
+
+.concept-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 4px;
+    border: 1px solid #d1d5db;
+}
+
+.concept-color.excellent {
+    background: rgba(5, 150, 105, 0.3);
+    border-color: #059669;
+}
+
+.concept-color.good {
+    background: rgba(22, 163, 74, 0.3);
+    border-color: #16a34a;
+}
+
+.concept-color.fair {
+    background: rgba(202, 138, 4, 0.3);
+    border-color: #ca8a04;
+}
+
+.concept-color.partial {
+    background: rgba(234, 88, 12, 0.3);
+    border-color: #ea580c;
+}
+
+.concept-color.poor {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+}
+
+/* 高亮文本 */
+.concept-highlighted-text {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px;
+    line-height: 1.6;
+    font-size: 13px;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.concept-segment {
+    padding: 1px 2px;
+    border-radius: 3px;
+    cursor: help;
+    transition: all 0.2s ease;
+}
+
+.concept-segment.excellent {
+    background-color: rgba(5, 150, 105, 0.2);
+    border-bottom: 1px solid #059669;
+}
+
+.concept-segment.good {
+    background-color: rgba(22, 163, 74, 0.2);
+    border-bottom: 1px solid #16a34a;
+}
+
+.concept-segment.fair {
+    background-color: rgba(202, 138, 4, 0.2);
+    border-bottom: 1px solid #ca8a04;
+}
+
+.concept-segment.partial {
+    background-color: rgba(234, 88, 12, 0.2);
+    border-bottom: 1px solid #ea580c;
+}
+
+.concept-segment.poor {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-bottom: 1px dashed #ef4444;
+}
+
+.concept-segment:hover {
+    transform: scale(1.02);
+    z-index: 10;
+}
+
+/* 建议区域 */
+.concept-suggestions {
+    margin-bottom: 16px;
+}
+
+.concept-suggestions-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.concept-suggestions-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.concept-suggestions-list li {
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #92400e;
+}
+
+/* 详细反馈区域 */
+.concept-detailed-feedback {
+    background: linear-gradient(135deg, #fefbff, #f8fafc);
+    border: 1px solid #e9d5ff;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 12px;
+}
+
+.concept-feedback-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #7c2d12;
+    margin-bottom: 10px;
+}
+
+.concept-feedback-item {
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.concept-feedback-item strong {
+    color: #7c2d12;
+}
+
+.concept-feedback-item ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+
+.concept-feedback-item li {
+    margin-bottom: 2px;
+    color: #374151;
+}
+
+/* 错误信息显示 */
+.concept-error {
+    margin-top: 12px;
+}
+
+.concept-error-content {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* 响应式调整 */
+@media (max-width: 480px) {
+    .word-munch-floating-widget {
+        max-width: 90vw !important;
+        width: 90vw !important;
+    }
+    
+    .concept-stats {
+        gap: 6px;
+    }
+    
+    .concept-stat {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
+    
+    .concept-legend {
+        gap: 6px;
+    }
+    
+    .concept-legend-item {
+        font-size: 10px;
+    }
+    
+    .concept-color {
+        width: 10px;
+        height: 10px;
+    }
+}
+
+/* 滚动条样式优化 */
+.concept-highlighted-text::-webkit-scrollbar,
+.concept-text-content::-webkit-scrollbar,
+.concept-context-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.concept-highlighted-text::-webkit-scrollbar-track,
+.concept-text-content::-webkit-scrollbar-track,
+.concept-context-content::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 2px;
+}
+
+.concept-highlighted-text::-webkit-scrollbar-thumb,
+.concept-text-content::-webkit-scrollbar-thumb,
+.concept-context-content::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 2px;
+}
+
+.concept-highlighted-text::-webkit-scrollbar-thumb:hover,
+.concept-text-content::-webkit-scrollbar-thumb:hover,
+.concept-context-content::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 动画效果 */
+.concept-results {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 确保浮动窗口在理解分析模式下有足够空间 */
+.word-munch-floating-widget.concept-mode {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* 加载状态的旋转动画已在原有样式中定义，这里确保兼容性 */
+.concept-loading .wm-spinner {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+    margin: 0 auto 8px;
+}
+
+/* === 拖拽功能样式 === */
+
+/* 拖拽手柄样式 */
+.drag-handle {
+    cursor: move !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+}
+
+.drag-handle:hover {
+    opacity: 0.8;
+}
+
+/* 拖拽时的窗口样式 */
+.word-munch-floating-widget.dragging {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+    transform: scale(1.02) !important;
+    transition: none !important;
+}
+
+/* 确保浮动窗口可以被拖拽 */
+.word-munch-floating-widget {
+    position: fixed !important;
+    z-index: 10000 !important;
+}
+
+/* === 原文高亮样式 === */
+
+/* 高亮容器 */
+.word-munch-highlight-container {
+    position: absolute;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* 基础高亮样式 */
+.word-munch-segment-highlight {
+    position: fixed;
+    pointer-events: none;
+    border-radius: 3px;
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+    z-index: 9999;
+}
+
+/* 不同理解程度的高亮颜色 */
+.word-munch-segment-highlight.excellent {
+    background-color: #059669 !important; /* 优秀 - 深绿色 */
+}
+
+.word-munch-segment-highlight.good {
+    background-color: #16a34a !important; /* 良好 - 绿色 */
+}
+
+.word-munch-segment-highlight.fair {
+    background-color: #ca8a04 !important; /* 一般 - 黄色 */
+}
+
+.word-munch-segment-highlight.partial {
+    background-color: #ea580c !important; /* 部分 - 橙色 */
+}
+
+.word-munch-segment-highlight.poor {
+    background-color: #ef4444 !important; /* 待改进 - 红色 */
+}
+
+/* 高亮动画效果 */
+.word-munch-segment-highlight {
+    animation: highlightFadeIn 0.5s ease-out;
+}
+
+@keyframes highlightFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+}
+
+/* 高亮悬停效果（虽然pointer-events: none，但可以用于调试） */
+.word-munch-segment-highlight:hover {
+    opacity: 0.5;
+}
+
+/* === 响应式调整 === */
+
+/* 移动设备上的拖拽优化 */
+@media (max-width: 768px) {
+    .drag-handle {
+        padding: 12px !important;
+        min-height: 44px !important; /* 确保触摸目标足够大 */
+    }
+    
+    .word-munch-floating-widget {
+        max-width: 90vw !important;
+    }
+    
+    /* 移动设备上的高亮样式调整 */
+    .word-munch-segment-highlight {
+        opacity: 0.4; /* 移动设备上稍微明显一些 */
+        border-radius: 2px;
+    }
+}
+
+/* === 浮动窗口改进 === */
+
+/* 确保头部可以作为拖拽区域 */
+.concept-header .wm-header-text {
+    flex-grow: 1;
+    cursor: move !important;
+    user-select: none !important;
+    padding: 8px 12px;
+}
+
+/* 关闭按钮不参与拖拽 */
+.wm-close-btn {
+    cursor: pointer !important;
+    user-select: none !important;
+    flex-shrink: 0;
+}
+
+/* 拖拽时禁用窗口内的文本选择 */
+.word-munch-floating-widget.dragging * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+}
+
+/* === 高亮图例样式（可选，用于说明） === */
+
+/* 如果需要在页面上显示高亮说明 */
+.word-munch-highlight-legend {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 9998;
+    font-size: 12px;
+    max-width: 200px;
+    display: none; /* 默认隐藏，需要时显示 */
+}
+
+.word-munch-highlight-legend.show {
+    display: block;
+}
+
+.highlight-legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.highlight-legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    margin-right: 8px;
+    opacity: 0.3;
+}
+
+.highlight-legend-color.excellent { background-color: #059669; }
+.highlight-legend-color.good { background-color: #16a34a; }
+.highlight-legend-color.fair { background-color: #ca8a04; }
+.highlight-legend-color.partial { background-color: #ea580c; }
+.highlight-legend-color.poor { background-color: #ef4444; }
+
+/* === 滚动和缩放兼容性 === */
+
+/* 确保高亮在页面滚动时保持位置 */
+.word-munch-segment-highlight {
+    position: fixed !important; /* 使用fixed定位跟随viewport */
+}
+
+/* 页面缩放时的高亮调整 */
+@media (min-resolution: 2dppx) {
+    .word-munch-segment-highlight {
+        border-radius: 2px;
+    }
+}
+
+/* === 打印样式 === */
+@media print {
+    .word-munch-floating-widget,
+    .word-munch-segment-highlight,
+    .word-munch-highlight-legend {
+        display: none !important;
+    }
+}
+
+/* === 高对比度模式支持 === */
+@media (prefers-contrast: high) {
+    .word-munch-segment-highlight {
+        opacity: 0.6;
+        border: 1px solid currentColor;
+    }
+    
+    .word-munch-segment-highlight.excellent { border-color: #059669; }
+    .word-munch-segment-highlight.good { border-color: #16a34a; }
+    .word-munch-segment-highlight.fair { border-color: #ca8a04; }
+    .word-munch-segment-highlight.partial { border-color: #ea580c; }
+    .word-munch-segment-highlight.poor { border-color: #ef4444; }
+}
+
+/* === 减少动画模式支持 === */
+@media (prefers-reduced-motion: reduce) {
+    .word-munch-segment-highlight {
+        animation: none;
+        transition: none;
+    }
+    
+    .word-munch-floating-widget {
+        transition: none;
+    }
 }

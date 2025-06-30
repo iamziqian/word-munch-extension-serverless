@@ -4,7 +4,7 @@ console.log('=== Service Worker: 启动 ===');
 // === 配置常量 ===
 const CONFIG = {
     WORD_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/word-muncher',
-    SENTENCE_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
+    CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
     MEMORY_CACHE_TIME: 3000, // 缩短到3秒，减少重复选择阻塞
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000, // 24小时 IndexedDB 缓存
     DB_NAME: 'WordMunchCache',
@@ -66,8 +66,20 @@ async function handleMessageAsync(request, sender) {
                 break;
                 
             case 'SENTENCE_SELECTED':
-                console.log('Service Worker: 处理句子选择:', request.text?.substring(0, 50) + '...');
-                await handleSentenceSelection(request, sender);
+                console.log('Service Worker: 处理句子选择，使用词汇API:', request.text);
+                // 句子选择使用词汇API处理
+                await handleWordSelection({
+                    word: request.text,
+                    text: request.text,
+                    context: request.context,
+                    url: request.url,
+                    title: request.title
+                }, sender);
+                break;
+                
+            case 'CONCEPT_ANALYSIS':
+                console.log('Service Worker: 处理理解分析:', request.original_text?.substring(0, 50) + '...');
+                await handleConceptAnalysis(request, sender);
                 break;
                 
             case 'CONTENT_SCRIPT_READY':
@@ -111,7 +123,9 @@ async function handleMessageAsync(request, sender) {
         
         // 发送错误给相关的tab
         if (request.type === 'WORD_SELECTED' || request.type === 'SENTENCE_SELECTED') {
-            await sendErrorToTab(sender.tab?.id, request.word || request.text, error.message);
+            await sendErrorToTab(sender.tab?.id, request.word || request.text, error.message, 'SIMPLIFY_ERROR');
+        } else if (request.type === 'CONCEPT_ANALYSIS') {
+            await sendErrorToTab(sender.tab?.id, request.original_text, error.message, 'CONCEPT_ANALYSIS_ERROR');
         }
         
         // 发送错误通知
@@ -229,7 +243,7 @@ async function handleWordSelection(request, sender) {
         
     } catch (error) {
         console.error('Service Worker: 词汇处理失败:', error);
-        await sendErrorToTab(sender.tab?.id, word, error.message);
+        await sendErrorToTab(sender.tab?.id, word, error.message, 'SIMPLIFY_ERROR');
         
         // 清理失败的请求
         const requestKey = `word_${word}_${(await getSettings()).outputLanguage}`;
@@ -237,103 +251,206 @@ async function handleWordSelection(request, sender) {
     }
 }
 
-// === 句子选择处理 ===
-async function handleSentenceSelection(request, sender) {
-    const { text, context, url, title } = request;
+// === 理解分析处理（新增） ===
+async function handleConceptAnalysis(request, sender) {
+    const { original_text, user_understanding, context, auto_extract_context, cache_key } = request;
     
     try {
+        // 检查扩展是否启用
         const settings = await getSettings();
         if (!settings.extensionEnabled) {
             console.log('Service Worker: 扩展已禁用');
             return;
         }
         
-        // 生成统一的缓存键
-        const memoryCacheKey = generateMemoryCacheKey('sentence', text, url);
-        const dataCacheKey = generateDataCacheKey('sentence', text, settings.outputLanguage);
-        const requestKey = `sentence_${text}_${settings.outputLanguage}`;
+        // 生成唯一的缓存键，包含用户理解
+        const uniqueCacheKey = cache_key || generateUniqueCacheKey(original_text, user_understanding, context);
+        const dataCacheKey = `concept_${uniqueCacheKey}_${settings.outputLanguage}`;
+        const requestKey = `concept_analysis_${uniqueCacheKey}`;
         const now = Date.now();
+        
+        console.log('Service Worker: 理解分析缓存键:', dataCacheKey);
         
         // === 检查是否有正在进行的相同请求 ===
         if (activeRequests.has(requestKey)) {
-            console.log('Service Worker: 发现正在进行的相同请求，等待结果');
+            console.log('Service Worker: 发现正在进行的相同理解分析请求，等待结果');
             try {
                 const result = await activeRequests.get(requestKey);
-                await showResult(result, text, url, sender.tab?.id);
+                await showConceptResult(result, original_text, request.url, sender.tab?.id);
                 return;
             } catch (error) {
-                console.error('Service Worker: 等待现有请求失败:', error);
+                console.error('Service Worker: 等待现有理解分析请求失败:', error);
             }
         }
         
-        // L1 内存缓存检查 - 改进逻辑
-        if (recentSelections.has(memoryCacheKey)) {
-            const lastTime = recentSelections.get(memoryCacheKey);
-            if (now - lastTime < CONFIG.MEMORY_CACHE_TIME) {
-                console.log('Service Worker: L1 内存缓存命中，检查数据缓存');
-                
-                const cachedData = await getCachedData(dataCacheKey);
-                if (cachedData) {
-                    console.log('Service Worker: 返回缓存的数据给重复请求');
-                    await showResult(cachedData, text, url, sender.tab?.id);
-                    return;
-                }
-            }
-        }
+        // 对于理解分析，我们采用更短的缓存时间，避免相同文本不同理解的冲突
+        const shortCacheTime = 5 * 60 * 1000; // 5分钟缓存
         
-        recentSelections.set(memoryCacheKey, now);
-        cleanupMemoryCache();
-        
-        // 检查内存数据缓存
+        // 检查短期内存缓存
         const cachedData = await getCachedData(dataCacheKey);
         if (cachedData) {
-            console.log('Service Worker: 内存数据缓存命中');
-            await showResult(cachedData, text, url, sender.tab?.id);
-            return;
+            const cacheAge = now - (cachedData.timestamp || 0);
+            if (cacheAge < shortCacheTime) {
+                console.log('Service Worker: 理解分析短期缓存命中');
+                await showConceptResult(cachedData.data, original_text, request.url, sender.tab?.id);
+                return;
+            } else {
+                // 清理过期的短期缓存
+                memoryCache.delete(dataCacheKey);
+                console.log('Service Worker: 清理过期的理解分析缓存');
+            }
         }
         
-        // L2 IndexedDB 缓存检查
-        const cachedResult = await getCachedResultFromDB('sentence', text, settings.outputLanguage);
-        if (cachedResult) {
-            console.log('Service Worker: L2 IndexedDB 缓存命中');
-            await showResult(cachedResult, text, url, sender.tab?.id);
-            
-            // 提升到内存缓存
-            memoryCache.set(dataCacheKey, {
-                data: cachedResult,
-                timestamp: now
-            });
-            
-            return;
-        }
+        // 对于理解分析，我们不使用长期IndexedDB缓存
+        // 因为相同文本的不同理解应该产生不同结果
         
-        // 创建API请求Promise并存储
-        const apiPromise = callWordAPI(text, context, settings.outputLanguage);
+        console.log('Service Worker: 理解分析直接调用 API');
+        
+        // === 创建API请求Promise并存储 ===
+        const apiPromise = callConceptAPI(original_text, user_understanding, context, auto_extract_context);
         activeRequests.set(requestKey, apiPromise);
         
         try {
-            // 暂时使用词汇 API 处理句子
-            console.log('Service Worker: 使用词汇 API 处理句子');
+            // === 调用 API ===
             const result = await apiPromise;
             
-            await Promise.all([
-                cacheResultToDB('sentence', text, settings.outputLanguage, result),
-                cacheResultToMemory('sentence', text, settings.outputLanguage, result)
-            ]);
+            // === 短期缓存结果（5分钟）===
+            memoryCache.set(dataCacheKey, {
+                data: result,
+                timestamp: now
+            });
+            console.log('Service Worker: 理解分析结果已缓存到短期内存');
             
-            await showResult(result, text, url, sender.tab?.id);
-            await updateWordStats();
+            // === 显示结果 ===
+            await showConceptResult(result, original_text, request.url, sender.tab?.id);
+            await updateConceptStats();
             
         } finally {
+            // 清理请求记录
             activeRequests.delete(requestKey);
         }
         
     } catch (error) {
-        console.error('Service Worker: 句子处理失败:', error);
-        await sendErrorToTab(sender.tab?.id, text, error.message);
+        console.error('Service Worker: 理解分析处理失败:', error);
+        await sendErrorToTab(sender.tab?.id, original_text, error.message, 'CONCEPT_ANALYSIS_ERROR');
         
-        const requestKey = `sentence_${text}_${(await getSettings()).outputLanguage}`;
+        // 清理失败的请求
+        const requestKey = `concept_analysis_${cache_key || generateUniqueCacheKey(original_text, user_understanding, context)}`;
         activeRequests.delete(requestKey);
+    }
+}
+
+function generateUniqueCacheKey(originalText, userUnderstanding, context) {
+    // 创建包含原文、用户理解和上下文的组合键
+    const combinedContent = `${originalText}||${userUnderstanding}||${context || ''}||${Date.now()}`;
+    
+    // 使用简单哈希函数
+    let hash = 0;
+    for (let i = 0; i < combinedContent.length; i++) {
+        const char = combinedContent.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return Math.abs(hash).toString(36);
+}
+
+async function callConceptAPI(original_text, user_understanding, context, auto_extract_context) {
+    console.log('Service Worker: 调用理解分析 API');
+    
+    const requestBody = {
+        original_text: original_text,
+        user_understanding: user_understanding,
+        context: context,
+        auto_extract_context: auto_extract_context || false
+    };
+
+    const headers = {
+        'Content-Type': 'application/json',
+        // 确保不使用HTTP缓存
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+    };
+
+    // 保留认证接口以便将来扩展
+    const authToken = await getAuthToken();
+    if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    const response = await fetch(CONFIG.CONCEPT_API_ENDPOINT, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+        // 禁用浏览器缓存
+        cache: 'no-cache'
+    });
+    
+    console.log('Service Worker: 理解分析 API 响应状态:', response.status);
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Service Worker: API 错误响应:', errorText);
+        throw new Error(`理解分析API请求失败 ${response.status}: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('Service Worker: 理解分析 API 成功响应，相似度:', result.overall_similarity);
+    
+    return result;
+}
+
+async function showConceptResult(result, original_text, url, tabId) {
+    try {
+        // 发送到指定标签页或当前活跃标签页
+        if (tabId) {
+            try {
+                await chrome.tabs.sendMessage(tabId, {
+                    type: 'CONCEPT_ANALYZED',
+                    original_text: original_text,
+                    result: result
+                });
+                console.log('Service Worker: 理解分析结果已发送到指定标签页');
+                return;
+            } catch (error) {
+                console.log('Service Worker: 发送到指定标签页失败，尝试当前活跃标签页');
+            }
+        }
+        
+        // 发送到当前活跃标签页
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs[0] && isValidTab(tabs[0])) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+                type: 'CONCEPT_ANALYZED',
+                original_text: original_text,
+                result: result
+            }).catch((error) => {
+                console.log('Service Worker: 无法发送理解分析结果到 content script:', error.message);
+            });
+        }
+    } catch (error) {
+        console.error('Service Worker: 显示理解分析结果失败:', error);
+    }
+}
+
+async function updateConceptStats() {
+    try {
+        const today = new Date().toDateString();
+        const result = await chrome.storage.sync.get(['conceptCounts']);
+        const counts = result.conceptCounts || { today: 0, week: 0, total: 0, lastDate: '' };
+        
+        if (counts.lastDate !== today) {
+            counts.today = 0;
+            counts.lastDate = today;
+        }
+        
+        counts.today++;
+        counts.total++;
+        
+        await chrome.storage.sync.set({ conceptCounts: counts });
+        console.log('Service Worker: 理解分析统计已更新:', counts);
+    } catch (error) {
+        console.error('Service Worker: 更新理解分析统计失败:', error);
     }
 }
 
@@ -353,13 +470,14 @@ async function getCachedData(dataCacheKey) {
 }
 
 // === 发送错误到特定标签页 ===
-async function sendErrorToTab(tabId, word, errorMessage) {
+async function sendErrorToTab(tabId, text, errorMessage, errorType = 'SIMPLIFY_ERROR') {
     if (!tabId) return;
     
     try {
         await chrome.tabs.sendMessage(tabId, {
-            type: 'SIMPLIFY_ERROR',
-            word: word,
+            type: errorType,
+            text: text,
+            word: text, // 保持向后兼容
             error: errorMessage
         });
     } catch (error) {
@@ -556,17 +674,23 @@ function cleanupMemoryCache() {
         }
     }
     
-    // 清理过期的内存缓存
+    // 清理过期的内存缓存，对理解分析使用更短的时间
     for (const [key, value] of memoryCache.entries()) {
-        if (now - value.timestamp > CONFIG.MEMORY_CACHE_TIME * 3) { // 内存缓存保持9秒
+        let maxAge = CONFIG.MEMORY_CACHE_TIME * 3; // 默认9秒
+        
+        // 理解分析缓存使用更短时间
+        if (key.startsWith('concept_')) {
+            maxAge = 5 * 60 * 1000; // 5分钟
+        }
+        
+        if (now - value.timestamp > maxAge) {
             memoryCache.delete(key);
         }
     }
     
-    // 清理过期的活跃请求（超过30秒的请求认为异常）
+    // 清理过期的活跃请求
     for (const [key, promise] of activeRequests.entries()) {
-        // 这里可以添加超时清理逻辑，但Promise本身没有时间戳
-        // 实际使用中可以考虑用 {promise, timestamp} 的结构
+        // 可以在这里添加基于时间的清理逻辑
     }
 }
 
@@ -574,7 +698,6 @@ function cleanupMemoryCache() {
 function generateMemoryCacheKey(type, text, url) {
     // 用于防重复的内存键（包含URL）
     return `memory_${type}_${text}_${url}`;
-
 }
 
 function generateDataCacheKey(type, text, language) {
@@ -702,7 +825,8 @@ async function getSettings() {
     const defaults = {
         extensionEnabled: true,
         outputLanguage: 'english',
-        notificationsEnabled: true
+        notificationsEnabled: true,
+        conceptMuncherEnabled: true
     };
     
     try {
@@ -713,7 +837,6 @@ async function getSettings() {
         return defaults;
     }
 }
-
 
 // === 结果显示 ===
 async function showResult(result, text, url, tabId) {
@@ -833,10 +956,10 @@ async function clearAllCache() {
         // 清理内存缓存
         memoryCache.clear();
         recentSelections.clear();
-        activeRequests.clear(); // 清理活跃请求
+        activeRequests.clear();
         console.log('Service Worker: 内存缓存已清理');
         
-         // 清理 IndexedDB - 按用户清理（保留用户隔离逻辑）
+        // 清理 IndexedDB - 包括理解分析缓存
         if (db) {
             const userInfo = await getUserInfo();
             const userId = userInfo ? userInfo.userId : 'anonymous';
@@ -937,7 +1060,14 @@ async function initializeExtension() {
             extensionEnabled: true,
             outputLanguage: 'english',
             notificationsEnabled: true,
+            conceptMuncherEnabled: true, // 新增：理解分析功能开关
             wordCounts: {
+                today: 0,
+                week: 0,
+                total: 0,
+                lastDate: new Date().toDateString()
+            },
+            conceptCounts: { // 新增：理解分析统计
                 today: 0,
                 week: 0,
                 total: 0,
