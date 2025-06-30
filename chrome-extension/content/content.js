@@ -1290,10 +1290,10 @@ class ResultDisplayer {
                 simplifyBtn.classList.remove('wm-btn-loop', 'wm-btn-next');
                 
                 if (current < total) {
-                    // Not the last one, display the normal "next"
+                    // Not the last one, display the normal "Symplify"
                     simplifyBtn.disabled = false;
                     simplifyBtn.innerHTML = '▶';
-                    simplifyBtn.title = `Next (${current}/${total})`;
+                    simplifyBtn.title = `Symplify (${current}/${total})`;
                     simplifyBtn.classList.add('wm-btn-next');
                 } else {
                     // The last one, display the loop prompt
