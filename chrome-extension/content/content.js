@@ -958,7 +958,8 @@ class ContentTemplates {
                     <button class="wm-btn wm-btn-primary concept-analyze-btn-minimal" disabled>
                         Analyze Understanding
                     </button>
-                    <div class="concept-cost-minimal">Cost: ~$0.0002</div>
+                    <!-- Make cost display more subtle -->
+                    <div class="concept-cost-minimal-improved">~$0.0002</div>
                 </div>
                 
                 <!-- Loading state -->
@@ -1435,16 +1436,11 @@ class ConceptAnalyzer {
             
             const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal');
             if (costElement) {
-                costElement.textContent = `Cost: ~$${estimatedCost.toFixed(4)}`;
-                
-                // Color code by cost
-                if (estimatedCost > 0.001) {
-                    costElement.style.color = '#dc2626'; // Red for high cost
-                } else if (estimatedCost > 0.0005) {
-                    costElement.style.color = '#f59e0b'; // Orange for medium cost
-                } else {
-                    costElement.style.color = '#16a34a'; // Green for low cost
-                }
+                // Make cost display more subtle
+                costElement.textContent = `~$${estimatedCost.toFixed(4)}`;
+                costElement.style.fontSize = '11px';
+                costElement.style.opacity = '0.6';
+                costElement.style.color = '#6b7280'; // Use gray for cost display
             }
             
             // Store simplified context strategy
@@ -1614,30 +1610,33 @@ class ConceptAnalyzer {
             // Only show if there are genuine misunderstandings
             if (feedback.misunderstandings && feedback.misunderstandings.length > 0 && !isEssentiallyCorrect) {
                 additionalFeedbackHTML += `
-                    <div class="concept-misunderstandings-minimal">
-                        <div class="misunderstanding-title">⚠️ Key Gaps</div>
-                        ${feedback.misunderstandings.map(gap => 
-                            `<div class="misunderstanding-item">${gap}</div>`
-                        ).join('')}
+                    <div class="concept-key-gaps-improved">
+                        <div class="gaps-header">
+                            <span class="gaps-icon">⚠️</span>
+                            <span class="gaps-title">Key Gaps</span>
+                            ${feedback.cognitive_level ? `<span class="cognitive-level-badge">${feedback.cognitive_level}</span>` : ''}
+                        </div>
+                        <div class="gaps-content">
+                            ${feedback.misunderstandings.map(gap => 
+                                `<div class="gap-item">
+                                    <span class="gap-bullet">•</span>
+                                    <span class="gap-text">${gap}</span>
+                                </div>`
+                            ).join('')}
+                        </div>
                     </div>
                 `;
             } else if (isEssentiallyCorrect) {
-                // If the understanding is essentially correct, display encouraging information
                 additionalFeedbackHTML += `
-                    <div class="concept-encouragement-minimal">
-                        <div class="encouragement-title">✅ Good Understanding</div>
-                        <div class="encouragement-item">Your grasp of the core concept is solid</div>
-                    </div>
-                `;
-            }
-            
-            // Display cognitive level
-            if (feedback.cognitive_level) {
-                const levelColor = isEssentiallyCorrect ? '#16a34a' : '#6b7280';
-                additionalFeedbackHTML += `
-                    <div class="concept-cognitive-level-minimal">
-                        <span class="cognitive-label">Level:</span> 
-                        <span class="cognitive-value" style="color: ${levelColor}">${feedback.cognitive_level}</span>
+                    <div class="concept-encouragement-improved">
+                        <div class="encouragement-header">
+                            <span class="encouragement-icon">✅</span>
+                            <span class="encouragement-title">Good Understanding</span>
+                            ${feedback.cognitive_level ? `<span class="cognitive-level-badge success">${feedback.cognitive_level}</span>` : ''}
+                        </div>
+                        <div class="encouragement-content">
+                            <span class="encouragement-text">Your grasp of the core concept is solid</span>
+                        </div>
                     </div>
                 `;
             }
@@ -1664,15 +1663,24 @@ class ConceptAnalyzer {
             
             ${additionalFeedbackHTML}
             
-            <div class="concept-suggestions-minimal">
-                <div class="suggestion-title">${suggestionsTitle}</div>
-                <div class="suggestions-container">
-                    ${suggestionsHTML}
+            <div class="concept-suggestions-improved">
+                <div class="suggestions-header">
+                    <span class="suggestions-icon">💡</span>
+                    <span class="suggestions-title">${suggestionsTitle}</span>
+                </div>
+                <div class="suggestions-content">
+                    ${suggestionsToShow.map(suggestion => 
+                        `<div class="suggestion-item-improved">
+                            <span class="suggestion-bullet">→</span>
+                            <span class="suggestion-text">${suggestion}</span>
+                        </div>`
+                    ).join('')}
                 </div>
             </div>
             
-            <div class="concept-cost-info-minimal">
-                Cost: $${(actualCost * 100).toFixed(3)}¢
+            <!-- Move cost to bottom, make it more subtle -->
+            <div class="concept-cost-final">
+                <span class="cost-text">$${(actualCost * 100).toFixed(3)}¢</span>
             </div>
         `;
         
@@ -1680,15 +1688,13 @@ class ConceptAnalyzer {
         resultsElement.style.display = 'block';
         loadingElement.style.display = 'none';
         
-        // 简化高亮显示
+        // Simplified highlight display
         if (analysis.segments) {
             HighlightManager.highlightOriginalText(analysis.segments);
         }
         
-        // 如果理解基本正确，可以考虑减少或调整高亮显示
         if (isEssentiallyCorrect) {
             console.log('Word Munch: Understanding is essentially correct, adjusting highlight emphasis');
-            // 可以在这里调整高亮的显示方式
         }
     }
 }
