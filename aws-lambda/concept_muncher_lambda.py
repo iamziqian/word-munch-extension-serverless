@@ -395,8 +395,7 @@ Return JSON with:
     
     def analyze_comprehension(self, original_text: str, user_understanding: str, context: str = None, auto_extract_context: bool = False) -> Dict[str, Any]:
         """
-        Cache Master version of comprehension analysis
-        Precise caching strategy: only cache high-value, high-repeat data
+        Optimized understanding analysis - smarter Claude trigger logic
         """
         logger.info("Starting comprehension analysis...")
         
@@ -444,45 +443,93 @@ Return JSON with:
             
             logger.info(f"Segment {i+1}: similarity={similarity:.3f}, level={level}")
         
-        # 4. Calculate overall metrics
+        # 4. Calculate overall similarity
         overall_similarity = sum(s['similarity'] for s in segment_similarities) / len(segment_similarities)
         
-        # 5. Generate suggestions
+        # 5. Smartly determine if Claude detailed feedback is needed
+        needs_claude_feedback = self._should_trigger_claude_feedback(
+            overall_similarity, 
+            segment_similarities, 
+            user_understanding, 
+            original_text
+        )
+        
+        # 6. Generate suggestions
         suggestions = self._generate_smart_suggestions(segment_similarities, overall_similarity)
         
-        logger.info(f"Analysis complete. Overall similarity: {overall_similarity:.3f}")
+        logger.info(f"Analysis complete. Overall similarity: {overall_similarity:.3f}, Needs Claude: {needs_claude_feedback}")
         
         result = {
             "overall_similarity": float(overall_similarity),
             "segments": segment_similarities,
             "suggestions": suggestions,
-            "needs_detailed_feedback": overall_similarity < 0.6,
-            "context_used": context is not None and len(context.strip()) > 0,  # Fix: proper context check
+            "needs_detailed_feedback": needs_claude_feedback,
+            "context_used": context is not None and len(context.strip()) > 0,
             "analysis_stats": {
                 "total_segments": len(segments),
                 "high_similarity_count": len([s for s in segment_similarities if s['similarity'] >= 0.8]),
+                "medium_similarity_count": len([s for s in segment_similarities if s['similarity'] >= 0.4]),
                 "low_similarity_count": len([s for s in segment_similarities if s['similarity'] < 0.4])
             }
         }
         
-        # Add extracted context info if available
+        # Add extracted context information (if any)
         if extracted_context_info:
             result["extracted_context"] = extracted_context_info
         
         return result
     
+    def _should_trigger_claude_feedback(self, overall_similarity: float, segments: List[Dict], 
+                                  user_understanding: str, original_text: str) -> bool:
+        """
+        Smart trigger logic: only call Claude's sharp analysis when really needed
+        """
+        
+        # Basic statistics
+        very_low_segments = len([s for s in segments if s['similarity'] < 0.2])
+        low_segments = len([s for s in segments if s['similarity'] < 0.4])
+        total_segments = len(segments)
+        
+        user_word_count = len(user_understanding.split())
+        original_word_count = len(original_text.split())
+        length_ratio = user_word_count / max(original_word_count, 1)
+        
+        # Condition 1: Very low similarity and short understanding - really not understood, need sharp guidance
+        if overall_similarity < 0.25 and user_word_count < 8:
+            logger.info("Trigger Claude: Very low similarity + short understanding - needs sharp analysis")
+            return True
+        
+        # Condition 2: Most segments are very poor - there are fundamental problems with understanding, need deep analysis
+        if very_low_segments > total_segments * 0.6:
+            logger.info("Trigger Claude: Most segments very poor - needs detailed feedback")
+            return True
+        
+        # Condition 3: Low similarity + abnormal understanding length - possibly systemic understanding problems
+        if overall_similarity < 0.3 and (length_ratio < 0.25 or length_ratio > 4.0):
+            logger.info("Trigger Claude: Low similarity + abnormal length - needs analysis")
+            return True
+        
+        # Condition 4: User specifically requests strict analysis (determined by special markers)
+        # Can be triggered by adding special keywords to understanding
+        if "详细分析" in user_understanding or "detailed analysis" in user_understanding.lower():
+            logger.info("Trigger Claude: User requested detailed analysis")
+            return True
+        
+        # Other cases: low similarity but possibly just different expression, don't waste API calls
+        logger.info(f"Skip Claude: Similarity {overall_similarity:.3f}, likely just different expression")
+        return False
+    
     def _classify_similarity(self, similarity: float) -> Tuple[str, str]:
-        """Classify similarity levels"""
-        if similarity >= 0.85:
-            return "excellent", "#059669"      # emerald-600
-        elif similarity >= 0.70:
-            return "good", "#16a34a"           # green-600  
+        if similarity >= 0.75:
+            return "excellent", "#059669"
         elif similarity >= 0.55:
-            return "fair", "#ca8a04"           # yellow-600
-        elif similarity >= 0.40:
-            return "partial", "#ea580c"        # orange-600
+            return "good", "#16a34a"  
+        elif similarity >= 0.35:
+            return "fair", "#ca8a04"
+        elif similarity >= 0.25:
+            return "partial", "#ea580c"
         else:
-            return "poor", "transparent"       # no highlight
+            return "poor", "transparent"
     
     def _enhance_user_understanding(self, user_understanding: str, context: str = None) -> str:
         """Enhance user understanding text"""
@@ -507,28 +554,35 @@ Return JSON with:
         return enhanced_text
     
     def _generate_smart_suggestions(self, segments: List[Dict], overall_similarity: float) -> List[str]:
-        """Generate intelligent suggestions"""
+        """
+        Generate smart suggestions - provide better generic suggestions for non-Claude cases
+        """
         suggestions = []
         
         poor_segments = [s for s in segments if s['similarity'] < 0.4]
         excellent_segments = [s for s in segments if s['similarity'] >= 0.8]
         
-        # Statistical analysis-based suggestions
-        if len(poor_segments) > len(segments) * 0.5:
+        # Provide different suggestions based on similarity level
+        if overall_similarity >= 0.6:
+            suggestions.append("Excellent understanding! You've grasped the key concepts well")
+        elif overall_similarity >= 0.4:
+            suggestions.append("Good comprehension of the main ideas")
+            if len(poor_segments) > 0:
+                suggestions.append("Consider including more specific details from the original text")
+        elif overall_similarity >= 0.25:
+            # Medium-low similarity: possibly different expression
             suggestions.extend([
-                "Consider re-reading the original text carefully, focusing on main arguments",
-                "Try to identify the core thesis and key supporting evidence"
+                "Your understanding may be correct but expressed differently",
+                "Try using more specific terms from the original text for better matching",
+                "Consider the author's exact examples and key phrases"
             ])
-        elif len(poor_segments) > 0:
+        else:
+            # Very low similarity: may need re-understanding
             suggestions.extend([
-                "Pay attention to details and logical connections in the text",
-                "Try segmented understanding, building overall comprehension step by step"
+                "Consider rereading the text to ensure you've captured the main points",
+                "Focus on the core message and key supporting details",
+                "Try to identify the author's primary argument or thesis"
             ])
-        
-        if overall_similarity >= 0.8:
-            suggestions.append("Great understanding! You could analyze the author's deeper intentions")
-        elif overall_similarity >= 0.6:
-            suggestions.append("Good basic understanding, focus on any missed key information")
         
         return suggestions[:3]  # Limit suggestion count
     
@@ -541,19 +595,21 @@ Return JSON with:
             
             system_prompt = "You are a reading comprehension expert. Analyze user understanding and provide actionable feedback in valid JSON format only."
             
-            user_content = f"""Original: {original_text[:400]}{"..." if len(original_text) > 400 else ""}
+            user_content = f"""Analyze this text and extract context:
 
-User understanding: {user_understanding}
+    Original: {original_text[:400]}{"..." if len(original_text) > 400 else ""}
 
-Similarity score: {analysis_result['overall_similarity']:.2f}
-Missed segments: {missed_content}
+    User understanding: {user_understanding}
 
-Provide JSON with:
-- misunderstandings: list of specific gaps
-- cognitive_level: current level (remember/understand/apply/analyze/evaluate/create)  
-- actionable_suggestions: 3 specific improvement tips
-- error_type: main issue (main_idea/evidence/details/attitude/logic/inference/evaluation)
-- bloom_taxonomy: Bloom's level"""
+    Similarity score: {analysis_result['overall_similarity']:.2f}
+    Missed segments: {missed_content}
+
+    Provide JSON with:
+    - misunderstandings: list of specific gaps
+    - cognitive_level: current level (remember/understand/apply/analyze/evaluate/create)  
+    - actionable_suggestions: 3 specific improvement tips
+    - error_type: main issue (main_idea/evidence/details/attitude/logic/inference/evaluation)
+    - bloom_taxonomy: Bloom's level"""
             
             body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
@@ -654,13 +710,23 @@ def lambda_handler(event, context):
             auto_extract_context
         )
         analysis_time = time.time() - start_time
+
+        # Debugging
+        logger.info(f"Overall similarity: {analysis_result['overall_similarity']}")
+        logger.info(f"Needs detailed feedback: {analysis_result['needs_detailed_feedback']}")
         
         # If detailed feedback needed, call Claude
         if analysis_result['needs_detailed_feedback']:
-            detailed_feedback = analyzer.get_detailed_feedback_from_claude(
-                original_text, user_understanding, analysis_result
-            )
-            analysis_result['detailed_feedback'] = detailed_feedback
+            logger.info("Calling Claude API for detailed feedback")
+            try:
+                detailed_feedback = analyzer.get_detailed_feedback_from_claude(
+                    original_text, user_understanding, analysis_result
+                )
+                logger.info(f"Claude feedback received: {json.dumps(detailed_feedback)}")
+                analysis_result['detailed_feedback'] = detailed_feedback
+            except Exception as e:
+                logger.error(f"Claude feedback failed: {e}")
+
         
         # Add performance metrics
         analysis_result['performance'] = {

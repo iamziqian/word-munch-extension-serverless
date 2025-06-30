@@ -1584,20 +1584,91 @@ class ConceptAnalyzer {
         const scorePercentage = Math.round(analysis.overall_similarity * 100);
         const actualCost = analysis.actual_cost || state.currentSelection.costEstimate?.estimatedCost || 0;
         
-        // Minimal results display
+        // Prioritize Claude's detailed feedback
+        let suggestionsToShow = [];
+        let suggestionsTitle = "💡 Key Suggestions";
+        let isEssentiallyCorrect = false;
+        
+        if (analysis.detailed_feedback && analysis.detailed_feedback.actionable_suggestions) {
+            // Use Claude's specific feedback
+            suggestionsToShow = analysis.detailed_feedback.actionable_suggestions;
+            suggestionsTitle = "🤖 AI Feedback";
+            isEssentiallyCorrect = analysis.detailed_feedback.is_essentially_correct || false;
+            console.log('Word Munch: Using Claude detailed feedback, essentially correct:', isEssentiallyCorrect);
+        } else {
+            // Fallback to generic suggestions
+            suggestionsToShow = analysis.suggestions.slice(0, 2);
+            console.log('Word Munch: Using generic suggestions');
+        }
+        
+        // Build suggestions HTML - show all suggestions, no truncation
+        const suggestionsHTML = suggestionsToShow.map(suggestion => 
+            `<div class="suggestion-item">• ${suggestion}</div>`
+        ).join('');
+        
+        // If Claude has detailed feedback, display more information
+        let additionalFeedbackHTML = '';
+        if (analysis.detailed_feedback) {
+            const feedback = analysis.detailed_feedback;
+            
+            // Only show if there are genuine misunderstandings
+            if (feedback.misunderstandings && feedback.misunderstandings.length > 0 && !isEssentiallyCorrect) {
+                additionalFeedbackHTML += `
+                    <div class="concept-misunderstandings-minimal">
+                        <div class="misunderstanding-title">⚠️ Key Gaps</div>
+                        ${feedback.misunderstandings.map(gap => 
+                            `<div class="misunderstanding-item">${gap}</div>`
+                        ).join('')}
+                    </div>
+                `;
+            } else if (isEssentiallyCorrect) {
+                // If the understanding is essentially correct, display encouraging information
+                additionalFeedbackHTML += `
+                    <div class="concept-encouragement-minimal">
+                        <div class="encouragement-title">✅ Good Understanding</div>
+                        <div class="encouragement-item">Your grasp of the core concept is solid</div>
+                    </div>
+                `;
+            }
+            
+            // Display cognitive level
+            if (feedback.cognitive_level) {
+                const levelColor = isEssentiallyCorrect ? '#16a34a' : '#6b7280';
+                additionalFeedbackHTML += `
+                    <div class="concept-cognitive-level-minimal">
+                        <span class="cognitive-label">Level:</span> 
+                        <span class="cognitive-value" style="color: ${levelColor}">${feedback.cognitive_level}</span>
+                    </div>
+                `;
+            }
+        }
+        
+        // Adjust score display color
+        let scoreColor = '#6366f1'; // Default blue
+        if (isEssentiallyCorrect) {
+            scoreColor = '#16a34a'; // Green for correct understanding
+        } else if (scorePercentage < 30) {
+            scoreColor = '#ef4444'; // Red for improvement needed
+        }
+        
+        // Full result HTML
         const resultsHTML = `
             <div class="concept-score-minimal">
-                <div class="score-circle">
+                <div class="score-circle" style="background: linear-gradient(135deg, ${scoreColor}, ${scoreColor}aa)">
                     <span class="score-number">${scorePercentage}%</span>
                 </div>
-                <div class="score-label">Understanding Match</div>
+                <div class="score-label">
+                    ${isEssentiallyCorrect ? 'Good Understanding' : 'Understanding Match'}
+                </div>
             </div>
             
+            ${additionalFeedbackHTML}
+            
             <div class="concept-suggestions-minimal">
-                <div class="suggestion-title">💡 Key Suggestions</div>
-                ${analysis.suggestions.slice(0, 2).map(suggestion => 
-                    `<div class="suggestion-item">• ${suggestion}</div>`
-                ).join('')}
+                <div class="suggestion-title">${suggestionsTitle}</div>
+                <div class="suggestions-container">
+                    ${suggestionsHTML}
+                </div>
             </div>
             
             <div class="concept-cost-info-minimal">
@@ -1609,9 +1680,15 @@ class ConceptAnalyzer {
         resultsElement.style.display = 'block';
         loadingElement.style.display = 'none';
         
-        // Simplified highlighting
+        // 简化高亮显示
         if (analysis.segments) {
             HighlightManager.highlightOriginalText(analysis.segments);
+        }
+        
+        // 如果理解基本正确，可以考虑减少或调整高亮显示
+        if (isEssentiallyCorrect) {
+            console.log('Word Munch: Understanding is essentially correct, adjusting highlight emphasis');
+            // 可以在这里调整高亮的显示方式
         }
     }
 }
