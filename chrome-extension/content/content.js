@@ -3,7 +3,7 @@
 // === 配置常量 ===
 const CONFIG = {
     CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
-    MIN_WORDS_FOR_CONCEPT: 10,
+    MIN_WORDS_FOR_CONCEPT: 6,
     MEMORY_CACHE_TIME: 3000
 };
 
