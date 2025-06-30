@@ -128,6 +128,20 @@ class EventManager {
             }
         }
         
+        // 检查是否在阅读模式中
+        const isInReaderMode = document.getElementById('word-munch-reader-container');
+        if (isInReaderMode) {
+            console.log('Word Munch: 在阅读模式中，确保文本选择正常工作');
+            // 在阅读模式中，我们需要确保文本选择不被其他事件干扰
+            if (selectedText && selectedText.length > 0) {
+                // 延迟处理，确保选择事件完成
+                setTimeout(() => {
+                    this.processTextSelectionInReaderMode(selectedText, selection);
+                }, 10);
+                return;
+            }
+        }
+        
         // 等待设置加载完成后再检查扩展状态
         if (!state.settingsLoaded) {
             console.log('Word Munch: 设置未加载完成，延迟处理');
@@ -177,10 +191,30 @@ class EventManager {
         }, 20); // 从50ms减少到20ms，提高响应速度
     }
 
-    processTextSelection(selectionData) {
-        const { text, selection, range } = selectionData;
+    // 在阅读模式中处理文本选择
+    processTextSelectionInReaderMode(selectedText, selection) {
+        console.log('Word Munch: 阅读模式中的文本选择:', selectedText);
         
-        console.log('Word Munch: 开始处理文本选择:', text);
+        // 检查扩展是否启用
+        if (!state.extensionSettings.extensionEnabled) {
+            console.log('Word Munch: 扩展已禁用，跳过阅读模式中的处理');
+            return;
+        }
+        
+        // 在阅读模式中，使用正常的处理逻辑
+        this.processTextSelection({
+            text: selectedText,
+            selection: selection,
+            range: selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null,
+            timestamp: Date.now(),
+            isInReaderMode: true // 标记这是来自阅读模式的选择
+        });
+    }
+
+    processTextSelection(selectionData) {
+        const { text, selection, range, isInReaderMode } = selectionData;
+        
+        console.log('Word Munch: 开始处理文本选择:', text, isInReaderMode ? '(阅读模式)' : '');
         
         // 再次检查扩展状态（防止在防抖延迟期间状态改变）
         if (!state.extensionSettings.extensionEnabled) {
@@ -195,7 +229,8 @@ class EventManager {
         state.currentSelection = {
             text: text,
             selection: selection,
-            range: range
+            range: range,
+            isInReaderMode: isInReaderMode || false
         };
         
         console.log('Word Munch: 设置当前选择:', text);
@@ -330,7 +365,7 @@ class TextValidator {
             return false;
         }
         
-        // 扩展词汇长度限制，支持更长的英文单词
+        // 修复：扩展词汇长度限制，支持更长的英文单词
         const wordRegex = /^[\p{L}]{1,20}$/u;  // 从1-10改为1-20字符
         const isValid = wordRegex.test(text);
         
@@ -2209,22 +2244,55 @@ class SimpleReaderMode {
         container.innerHTML = chunkedHTML;
         container.classList.add('chunked-mode');
 
+        // 绑定段落点击事件 - 但要避免干扰文本选择
         container.querySelectorAll('.text-chunk').forEach((chunk, index) => {
-            chunk.addEventListener('click', () => {
-                this.currentChunkIndex = index;
-                this.focusChunk(chunk, index);
+            // 使用 mousedown 而不是 click，并检查是否是文本选择
+            chunk.addEventListener('mousedown', (e) => {
+                // 记录鼠标按下的时间和位置
+                chunk._mouseDownTime = Date.now();
+                chunk._mouseDownX = e.clientX;
+                chunk._mouseDownY = e.clientY;
             });
             
-            chunk.addEventListener('dblclick', () => {
-                if (this.isFocusMode) {
-                    this.exitFocusMode();
+            chunk.addEventListener('mouseup', (e) => {
+                // 检查是否是快速点击（非文本选择）
+                const timeDiff = Date.now() - (chunk._mouseDownTime || 0);
+                const distanceX = Math.abs(e.clientX - (chunk._mouseDownX || 0));
+                const distanceY = Math.abs(e.clientY - (chunk._mouseDownY || 0));
+                
+                // 如果是快速点击且鼠标移动距离很小，才触发聚焦
+                if (timeDiff < 200 && distanceX < 5 && distanceY < 5) {
+                    // 检查是否有文本被选中
+                    const selection = window.getSelection();
+                    const selectedText = selection.toString().trim();
+                    
+                    // 只有在没有选中文本时才触发段落聚焦
+                    if (!selectedText || selectedText.length === 0) {
+                        console.log('Word Munch: 段落点击聚焦，索引:', index);
+                        this.currentChunkIndex = index;
+                        this.focusChunk(chunk, index);
+                    } else {
+                        console.log('Word Munch: 检测到文本选择，跳过段落聚焦');
+                    }
                 }
+            });
+            
+            // 双击退出专注模式
+            chunk.addEventListener('dblclick', (e) => {
+                // 延迟检查，确保双击不会干扰文本选择
+                setTimeout(() => {
+                    if (this.isFocusMode) {
+                        this.exitFocusMode();
+                    }
+                }, 50);
             });
         });
 
         this.currentChunkIndex = -1;
         container.classList.remove('focus-mode');
         this.isFocusMode = false;
+        
+        console.log('Word Munch: 分段内容渲染完成，文本选择已启用');
     }
 
     renderNormalContent(container) {
