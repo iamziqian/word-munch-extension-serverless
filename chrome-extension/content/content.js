@@ -330,9 +330,17 @@ class TextValidator {
             return false;
         }
         
-        const wordRegex = /^[\p{L}]{1,10}$/u;
+        // 扩展词汇长度限制，支持更长的英文单词
+        const wordRegex = /^[\p{L}]{1,20}$/u;  // 从1-10改为1-20字符
         const isValid = wordRegex.test(text);
-        console.log('Word Munch: 文本验证结果:', text, '-> 有效词汇:', isValid);
+        
+        // 额外检查：确保是合理的英文单词（允许常见的长单词）
+        if (!isValid && /^[a-zA-Z]+$/.test(text) && text.length <= 20) {
+            console.log('Word Munch: 通过英文单词备选验证:', text);
+            return true;
+        }
+        
+        console.log('Word Munch: 文本验证结果:', text, '-> 有效词汇:', isValid, '长度:', text.length);
         return isValid;
     }
 
