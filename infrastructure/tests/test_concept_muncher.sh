@@ -111,6 +111,22 @@ run_test "Test 1: Basic Segmentation Validation" \
 }' \
 "Expected: 2 sentences, no duplicates, context_used=false"
 
+# Test 1.5: Single Sentence Phrase Segmentation Test - NEW TEST
+run_test "Test 1.5: Single Sentence Phrase Segmentation Test" \
+'{
+  "original_text": "Machine learning includes supervised learning, unsupervised learning, and reinforcement learning techniques for data analysis.",
+  "user_understanding": "Machine learning has three types: supervised, unsupervised, and reinforcement learning."
+}' \
+"Expected: Single sentence split into phrases, type='phrase', 3-4 phrases with commas and conjunctions"
+
+# Test 1.6: Complex Single Sentence Test - NEW TEST  
+run_test "Test 1.6: Complex Single Sentence Test" \
+'{
+  "original_text": "Artificial intelligence, through machine learning algorithms, natural language processing, and computer vision technologies, enables automated decision-making in healthcare, finance, and transportation industries.",
+  "user_understanding": "AI uses ML, NLP and computer vision to automate decisions in healthcare, finance and transportation."
+}' \
+"Expected: Single complex sentence split into meaningful phrases, type='phrase', 5-6 phrases"
+
 # Test 2: Decimal Point Fix Validation
 run_test "Test 2: Decimal Point Fix Validation" \
 '{
@@ -228,17 +244,35 @@ run_test "Test 10: Comprehensive Functionality Test" \
 }' \
 "Expected: context_used=true, all features working together"
 
+# Test 11: Edge Case - Very Short Single Sentence
+run_test "Test 11: Edge Case - Very Short Single Sentence" \
+'{
+  "original_text": "AI helps doctors and patients.",
+  "user_understanding": "AI helps medical professionals."
+}' \
+"Expected: Short sentence handled gracefully, may fallback to whole sentence or simple phrase split"
+
+# Test 12: Single Sentence with Multiple Conjunctions
+run_test "Test 12: Single Sentence with Multiple Conjunctions" \
+'{
+  "original_text": "Data science combines statistics, programming, and domain expertise, however it also requires critical thinking, communication skills, and continuous learning.",
+  "user_understanding": "Data science needs technical skills and soft skills like thinking and communication."
+}' \
+"Expected: Single sentence split at conjunctions (and, however), type='phrase', 4-5 phrases"
+
 echo -e "${GREEN}✅ Testing Complete${NC}"
 echo ""
 echo -e "${BLUE}📊 Test Results Summary${NC}"
 echo "Detailed results saved to: $LOG_FILE"
 echo ""
 echo "Please check the following key metrics:"
-echo "1. All segments have type 'sentence'"
-echo "2. Decimal points (0.25%) are not incorrectly split"
-echo "3. context_used accurately reflects actual usage"
-echo "4. Cache performance shows significant improvement"
-echo "5. Error handling returns correct HTTP status codes"
+echo "1. Multi-sentence text has segments with type 'sentence'"
+echo "2. Single sentence text has segments with type 'phrase'"
+echo "3. Decimal points (0.25%) are not incorrectly split"
+echo "4. context_used accurately reflects actual usage"
+echo "5. Cache performance shows significant improvement"
+echo "6. Error handling returns correct HTTP status codes"
+echo "7. Single sentences are intelligently split into meaningful phrases"
 echo ""
 echo -e "${YELLOW}Please send the contents of $LOG_FILE to the developer for analysis!${NC}"
 echo ""

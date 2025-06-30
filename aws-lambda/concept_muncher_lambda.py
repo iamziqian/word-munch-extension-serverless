@@ -68,24 +68,184 @@ class TextComprehensionAnalyzer:
     
     def segment_text(self, text: str) -> List[Dict[str, Any]]:
         """
-        Intelligent text segmentation with cache optimization
+        Intelligent Text Segmentation: Use phrase to segment a single sentence, use sentence to segment multiple sentences.
         Cache strategy: High-value cache, 30-day TTL
         """
         cache_key = self.get_cache_key('segments', text)
-        
+    
         # Try cache read
         cached_segments = self.get_cached_data(cache_key)
         if cached_segments:
             return cached_segments
         
-        # Perform segmentation computation
-        segments = self._perform_text_segmentation(text)
+        # 判断是否为单句话
+        is_single_sentence = self._is_single_sentence(text)
+        
+        if is_single_sentence:
+            # 使用phrase分割
+            segments = self._perform_phrase_segmentation(text)
+        else:
+            # 使用sentence分割
+            segments = self._perform_text_segmentation(text)
         
         # Cache results
         self.set_cached_data(cache_key, segments, 'segments')
         
         return segments
     
+    def _is_single_sentence(self, text: str) -> bool:
+        """
+        判断文本是否为单句话
+        规则：
+        1. 只有一个句子结束符（.!?）
+        2. 或者没有句子结束符
+        3. 或者总词数少于20个词
+        """
+        # 清理文本
+        text = text.strip()
+        
+        # 统计句子结束符（排除小数点）
+        sentence_endings = re.findall(r'(?<!\d)[.!?。！？](?!\d)', text)
+        
+        # 词数统计
+        word_count = len(text.split())
+        
+        # 判断条件
+        if len(sentence_endings) <= 1 and word_count <= 20:
+            return True
+        elif len(sentence_endings) == 0:
+            return True
+        else:
+            return False
+
+    
+    def _perform_phrase_segmentation(self, text: str) -> List[Dict[str, Any]]:
+        """
+        执行phrase级别的分割
+        基于语法结构和标点符号进行更细粒度的分割
+        """
+        segments = []
+        
+        # Phrase分割规则：
+        # 1. 逗号、分号、冒号分割
+        # 2. 连词分割 (and, but, or, however, therefore, etc.)
+        # 3. 介词短语分割
+        # 4. 关键词分割点
+        
+        # 分割模式
+        phrase_patterns = [
+            r'[,;:]',  # 标点符号
+            r'\s+(?:and|but|or|however|therefore|moreover|furthermore|additionally|consequently)\s+',  # 连词
+            r'\s+(?:in|on|at|by|for|with|through|during|after|before|since|until)\s+',  # 介词
+            r'\s+(?:such as|for example|including|like)\s+',  # 举例词
+        ]
+        
+        # 合并所有模式
+        combined_pattern = '|'.join(f'({pattern})' for pattern in phrase_patterns)
+        
+        # 执行分割
+        parts = re.split(combined_pattern, text)
+        
+        current_pos = 0
+        current_phrase = ""
+        
+        for part in parts:
+            if part is None:
+                continue
+                
+            part = part.strip()
+            if not part:
+                continue
+            
+            # 如果是分隔符，结束当前phrase
+            if re.match(combined_pattern, part):
+                if current_phrase:
+                    # 添加当前phrase
+                    start_pos = text.find(current_phrase, current_pos)
+                    if start_pos == -1:
+                        start_pos = current_pos
+                    end_pos = start_pos + len(current_phrase)
+                    
+                    segments.append({
+                        "text": current_phrase.strip(),
+                        "start": start_pos,
+                        "end": end_pos,
+                        "type": "phrase",  # 标记为phrase类型
+                        "level": "primary"
+                    })
+                    
+                    current_pos = end_pos
+                    current_phrase = ""
+            else:
+                # 累积phrase内容
+                if current_phrase:
+                    current_phrase += " " + part
+                else:
+                    current_phrase = part
+        
+        # 处理最后一个phrase
+        if current_phrase:
+            start_pos = text.find(current_phrase, current_pos)
+            if start_pos == -1:
+                start_pos = current_pos
+            end_pos = start_pos + len(current_phrase)
+            
+            segments.append({
+                "text": current_phrase.strip(),
+                "start": start_pos,
+                "end": end_pos,
+                "type": "phrase",
+                "level": "primary"
+            })
+        
+        # 如果分割结果太少，使用备用方案
+        if len(segments) < 2:
+            segments = self._fallback_phrase_segmentation(text)
+        
+        logger.info(f"Phrase segmented text into {len(segments)} phrases")
+        return segments
+    
+    def _fallback_phrase_segmentation(self, text: str) -> List[Dict[str, Any]]:
+        """
+        备用phrase分割方案：基于词数均匀分割
+        """
+        words = text.split()
+        if len(words) <= 3:
+            # 太短，整体作为一个phrase
+            return [{
+                "text": text,
+                "start": 0,
+                "end": len(text),
+                "type": "phrase",
+                "level": "primary"
+            }]
+        
+        # 按词数分割成2-3个phrase
+        segments = []
+        words_per_phrase = max(3, len(words) // 2)
+        
+        current_pos = 0
+        for i in range(0, len(words), words_per_phrase):
+            phrase_words = words[i:i + words_per_phrase]
+            phrase_text = " ".join(phrase_words)
+            
+            start_pos = text.find(phrase_text, current_pos)
+            if start_pos == -1:
+                start_pos = current_pos
+            end_pos = start_pos + len(phrase_text)
+            
+            segments.append({
+                "text": phrase_text,
+                "start": start_pos,
+                "end": end_pos,
+                "type": "phrase",
+                "level": "primary"
+            })
+            
+            current_pos = end_pos
+        
+        return segments
+
     def _perform_text_segmentation(self, text: str) -> List[Dict[str, Any]]:
         """Execute actual text segmentation - DECIMAL FIXED"""
         segments = []
