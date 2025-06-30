@@ -1419,3 +1419,253 @@
         transition: none;
     }
 }
+
+/* 高亮滚动跟随优化样式 */
+
+/* 改进的高亮元素样式 */
+.word-munch-segment-highlight {
+    position: fixed !important;
+    pointer-events: none !important;
+    border-radius: 4px !important;
+    opacity: 0.3 !important;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important; /* 更流畅的过渡 */
+    z-index: 9999 !important;
+    
+    /* 防止高亮元素影响页面布局 */
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    
+    /* 确保高亮在所有设备上正确显示 */
+    -webkit-transform: translateZ(0) !important; /* 启用硬件加速 */
+    transform: translateZ(0) !important;
+    
+    /* 防止文本选择 */
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+
+/* 滚动时的流畅动画 */
+.word-munch-segment-highlight.scrolling {
+    transition: all 0.1s linear !important; /* 滚动时使用线性过渡 */
+}
+
+/* 不同理解程度的高亮颜色 - 增强版 */
+.word-munch-segment-highlight.excellent {
+    background-color: rgba(5, 150, 105, 0.35) !important; /* 稍微提高不透明度 */
+    border: 1px solid rgba(5, 150, 105, 0.5) !important; /* 添加边框增强可见性 */
+}
+
+.word-munch-segment-highlight.good {
+    background-color: rgba(22, 163, 74, 0.35) !important;
+    border: 1px solid rgba(22, 163, 74, 0.5) !important;
+}
+
+.word-munch-segment-highlight.fair {
+    background-color: rgba(202, 138, 4, 0.35) !important;
+    border: 1px solid rgba(202, 138, 4, 0.5) !important;
+}
+
+.word-munch-segment-highlight.partial {
+    background-color: rgba(234, 88, 12, 0.35) !important;
+    border: 1px solid rgba(234, 88, 12, 0.5) !important;
+}
+
+.word-munch-segment-highlight.poor {
+    background-color: rgba(239, 68, 68, 0.3) !important;
+    border: 1px dashed rgba(239, 68, 68, 0.6) !important; /* 虚线边框表示需要改进 */
+}
+
+/* 高亮动画效果 - 改进版 */
+.word-munch-segment-highlight {
+    animation: highlightFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+@keyframes highlightFadeIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.98) translateZ(0);
+        filter: blur(1px);
+    }
+    50% {
+        opacity: 0.2;
+        transform: scale(1.01) translateZ(0);
+        filter: blur(0.5px);
+    }
+    100% {
+        opacity: 0.3;
+        transform: scale(1) translateZ(0);
+        filter: blur(0);
+    }
+}
+
+/* 超出视口时的淡化效果 */
+.word-munch-segment-highlight.out-of-viewport {
+    opacity: 0.1 !important;
+    transition: opacity 0.2s ease-out !important;
+}
+
+/* 高亮悬停效果（用于调试，实际使用中pointer-events: none） */
+.word-munch-segment-highlight:hover {
+    opacity: 0.5 !important;
+    transform: scale(1.02) translateZ(0) !important;
+}
+
+/* 高对比度模式下的高亮样式 */
+@media (prefers-contrast: high) {
+    .word-munch-segment-highlight {
+        opacity: 0.6 !important;
+        border-width: 2px !important;
+        border-style: solid !important;
+    }
+    
+    .word-munch-segment-highlight.excellent {
+        background-color: rgba(5, 150, 105, 0.7) !important;
+        border-color: #059669 !important;
+    }
+    
+    .word-munch-segment-highlight.good {
+        background-color: rgba(22, 163, 74, 0.7) !important;
+        border-color: #16a34a !important;
+    }
+    
+    .word-munch-segment-highlight.fair {
+        background-color: rgba(202, 138, 4, 0.7) !important;
+        border-color: #ca8a04 !important;
+    }
+    
+    .word-munch-segment-highlight.partial {
+        background-color: rgba(234, 88, 12, 0.7) !important;
+        border-color: #ea580c !important;
+    }
+    
+    .word-munch-segment-highlight.poor {
+        background-color: rgba(239, 68, 68, 0.6) !important;
+        border-color: #ef4444 !important;
+        border-style: dashed !important;
+    }
+}
+
+/* 减少动画模式下的样式 */
+@media (prefers-reduced-motion: reduce) {
+    .word-munch-segment-highlight {
+        animation: none !important;
+        transition: opacity 0.2s ease !important; /* 只保留不透明度过渡 */
+    }
+    
+    .word-munch-segment-highlight:hover {
+        transform: none !important; /* 移除缩放效果 */
+    }
+}
+
+/* 移动设备优化 */
+@media (max-width: 768px) {
+    .word-munch-segment-highlight {
+        border-radius: 3px !important; /* 移动设备上稍小的圆角 */
+        opacity: 0.4 !important; /* 移动设备上稍微明显一些 */
+        transition: all 0.2s ease !important; /* 移动设备上稍慢的过渡 */
+    }
+    
+    /* 移动设备上的边框稍细 */
+    .word-munch-segment-highlight.excellent,
+    .word-munch-segment-highlight.good,
+    .word-munch-segment-highlight.fair,
+    .word-munch-segment-highlight.partial,
+    .word-munch-segment-highlight.poor {
+        border-width: 0.5px !important;
+    }
+}
+
+/* 超小屏幕设备 */
+@media (max-width: 480px) {
+    .word-munch-segment-highlight {
+        border-radius: 2px !important;
+        opacity: 0.45 !important;
+    }
+}
+
+/* 高刷新率设备优化 */
+@media (min-resolution: 120dpi) {
+    .word-munch-segment-highlight {
+        border-radius: 5px !important; /* 高分辨率设备上更大的圆角 */
+    }
+}
+
+/* 打印样式 */
+@media print {
+    .word-munch-segment-highlight {
+        display: none !important; /* 打印时隐藏高亮 */
+    }
+}
+
+/* 暗色主题支持 */
+@media (prefers-color-scheme: dark) {
+    .word-munch-segment-highlight.excellent {
+        background-color: rgba(5, 150, 105, 0.25) !important;
+        border-color: rgba(5, 150, 105, 0.4) !important;
+    }
+    
+    .word-munch-segment-highlight.good {
+        background-color: rgba(22, 163, 74, 0.25) !important;
+        border-color: rgba(22, 163, 74, 0.4) !important;
+    }
+    
+    .word-munch-segment-highlight.fair {
+        background-color: rgba(202, 138, 4, 0.25) !important;
+        border-color: rgba(202, 138, 4, 0.4) !important;
+    }
+    
+    .word-munch-segment-highlight.partial {
+        background-color: rgba(234, 88, 12, 0.25) !important;
+        border-color: rgba(234, 88, 12, 0.4) !important;
+    }
+    
+    .word-munch-segment-highlight.poor {
+        background-color: rgba(239, 68, 68, 0.2) !important;
+        border-color: rgba(239, 68, 68, 0.4) !important;
+    }
+}
+
+/* 性能优化：GPU 加速 */
+.word-munch-segment-highlight {
+    will-change: transform, opacity !important; /* 提示浏览器这些属性会变化 */
+    -webkit-backface-visibility: hidden !important; /* 防止闪烁 */
+    backface-visibility: hidden !important;
+}
+
+/* 滚动性能优化 */
+.word-munch-highlight-container {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    pointer-events: none !important;
+    z-index: 9998 !important; /* 比单个高亮稍低 */
+    
+    /* 包含层优化 */
+    contain: layout style paint !important;
+}
+
+/* 调试样式（仅在开发模式下使用） */
+.word-munch-segment-highlight.debug {
+    border: 2px solid red !important;
+    opacity: 0.8 !important;
+    z-index: 10001 !important;
+}
+
+.word-munch-segment-highlight.debug::after {
+    content: attr(data-level) !important;
+    position: absolute !important;
+    top: -20px !important;
+    left: 0 !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+    color: white !important;
+    padding: 2px 4px !important;
+    font-size: 10px !important;
+    border-radius: 2px !important;
+    pointer-events: none !important;
+}

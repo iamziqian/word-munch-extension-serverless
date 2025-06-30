@@ -11,6 +11,12 @@ let currentSelection = null;
 let currentResult = null;
 let currentSynonymIndex = 0;
 let floatingWidget = null;
+let highlightManager = null;
+
+// 添加滚动跟踪变量
+let highlightRanges = []; // 存储高亮的 range 信息
+let scrollUpdateTimer = null;
+let isScrollTracking = false;
 
 // 全局变量来跟踪事件监听器状态
 let outsideClickListenerActive = false;
@@ -68,6 +74,15 @@ function handleTextSelection(event) {
   const selectedText = selection.toString().trim();
   
   console.log('Word Munch: 文本选择事件触发，选中文本:', selectedText);
+
+  // 快速修复：如果有理解分析高亮且选择的是单词，创建独立窗口
+  if (isConceptMode && highlightRanges && highlightRanges.length > 0) {
+    if (selectedText && isValidWord(selectedText)) {
+        console.log('Word Munch: 在高亮区域选择单词，创建独立词汇窗口');
+        createIndependentWordWindow(selectedText, selection);
+        return; // 重要：直接返回，不清理高亮
+    }
+  }
   
   // 检查扩展是否被禁用
   if (!extensionSettings.extensionEnabled) {
@@ -443,6 +458,27 @@ function makeDraggable(element) {
       }
   });
 }
+
+// === Initialize Highlight Manager ===
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Word Munch: Content script 已加载');
+  
+  // 初始化高亮管理器
+  if (typeof IntegratedHighlightManager !== 'undefined') {
+      highlightManager = new IntegratedHighlightManager();
+      console.log('Word Munch: 高亮管理器已初始化');
+  } else {
+      console.warn('Word Munch: 高亮管理器未加载，将使用原始方法');
+  }
+  
+  // 通知 background script content script 已准备就绪
+  sendMessageToBackground({
+      type: 'CONTENT_SCRIPT_READY',
+      url: window.location.href
+  });
+});
+
+
 
 // === 创建 Word Muncher 内容 ===
 function createWordMuncherContent(text) {
@@ -1179,7 +1215,7 @@ function displayConceptResults(analysis) {
 }
 
 function highlightOriginalText(segments) {
-  console.log('Word Munch: 开始在原文上显示高亮');
+  console.log('Word Munch: 开始在原文上显示滚动跟随高亮');
   
   // 清理之前的高亮
   clearOriginalHighlights();
@@ -1193,19 +1229,183 @@ function highlightOriginalText(segments) {
       const originalRange = currentSelection.range;
       const originalText = currentSelection.text;
       
-      // 创建高亮容器
-      const highlightContainer = document.createElement('div');
-      highlightContainer.className = 'word-munch-highlight-container';
-      highlightContainer.style.position = 'absolute';
-      highlightContainer.style.pointerEvents = 'none';
-      highlightContainer.style.zIndex = '9999';
+      // 重置高亮数据
+      highlightRanges = [];
+      originalHighlightElements = [];
       
-      // 根据segments创建高亮元素
+      // 为每个 segment 创建高亮
       let currentOffset = 0;
       segments.forEach((segment, index) => {
           const segmentStart = originalText.indexOf(segment.text, currentOffset);
           if (segmentStart === -1) return;
           
+          try {
+              // 创建这个 segment 的 range
+              const segmentRange = document.createRange();
+              segmentRange.setStart(originalRange.startContainer, originalRange.startOffset + segmentStart);
+              segmentRange.setEnd(originalRange.startContainer, originalRange.startOffset + segmentStart + segment.text.length);
+              
+              // 获取位置
+              const segmentRect = segmentRange.getBoundingClientRect();
+              
+              // 创建高亮元素
+              const highlight = document.createElement('div');
+              highlight.className = `word-munch-segment-highlight ${segment.level}`;
+              highlight.style.position = 'fixed';
+              highlight.style.left = `${segmentRect.left}px`;
+              highlight.style.top = `${segmentRect.top}px`;
+              highlight.style.width = `${segmentRect.width}px`;
+              highlight.style.height = `${segmentRect.height}px`;
+              highlight.style.pointerEvents = 'none';
+              highlight.style.borderRadius = '3px';
+              highlight.style.opacity = '0.3';
+              highlight.style.zIndex = '9999';
+              highlight.style.transition = 'all 0.1s ease-out';
+              
+              // 设置背景颜色
+              const colors = {
+                  'excellent': '#059669',
+                  'good': '#16a34a',
+                  'fair': '#ca8a04',
+                  'partial': '#ea580c',
+                  'poor': '#ef4444'
+              };
+              highlight.style.backgroundColor = colors[segment.level] || '#6b7280';
+              
+              // 添加到页面
+              document.body.appendChild(highlight);
+              
+              // 保存高亮信息，包含 range 用于位置更新
+              const highlightInfo = {
+                  element: highlight,
+                  range: segmentRange.cloneRange(), // 克隆 range 避免被修改
+                  level: segment.level,
+                  text: segment.text
+              };
+              
+              highlightRanges.push(highlightInfo);
+              originalHighlightElements.push(highlight);
+              
+              currentOffset = segmentStart + segment.text.length;
+              
+          } catch (error) {
+              console.warn('Word Munch: 创建 segment 高亮失败:', error);
+          }
+      });
+      
+      console.log('Word Munch: 高亮创建完成，共', highlightRanges.length, '个高亮元素');
+      
+      // 开始滚动跟踪
+      startScrollTracking();
+      
+  } catch (error) {
+      console.error('Word Munch: 原文高亮失败:', error);
+  }
+}
+
+function startScrollTracking() {
+  if (isScrollTracking) return;
+  
+  isScrollTracking = true;
+  console.log('Word Munch: 开始零延迟滚动跟踪');
+  
+  // 直接更新，无延迟
+  function instantUpdate() {
+      updateAllHighlightPositions();
+  }
+  
+  // 高亮数量少时用零延迟，多时用微延迟
+  const updateHandler = highlightRanges.length <= 5 ? 
+      instantUpdate : 
+      (() => {
+          let pending = false;
+          return () => {
+              if (!pending) {
+                  pending = true;
+                  setTimeout(() => {
+                      updateAllHighlightPositions();
+                      pending = false;
+                  }, 1); // 仅1ms延迟
+              }
+          };
+      })();
+  
+  window.addEventListener('scroll', updateHandler, { passive: true });
+  window.addEventListener('resize', updateHandler, { passive: true });
+  window.highlightScrollHandler = updateHandler;
+}
+
+function stopScrollTracking() {
+  if (!isScrollTracking) return;
+  
+  isScrollTracking = false;
+  console.log('Word Munch: 停止滚动跟踪');
+  
+  // 移除事件监听器
+  if (window.highlightScrollHandler) {
+      window.removeEventListener('scroll', window.highlightScrollHandler);
+      window.removeEventListener('resize', window.highlightScrollHandler);
+      window.highlightScrollHandler = null;
+  }
+  
+  // 清理定时器
+  if (scrollUpdateTimer) {
+      clearTimeout(scrollUpdateTimer);
+      scrollUpdateTimer = null;
+  }
+}
+
+function updateAllHighlightPositions() {
+  if (!highlightRanges || highlightRanges.length === 0) {
+      return;
+  }
+  
+  highlightRanges.forEach((highlightInfo, index) => {
+      try {
+          // 重新获取 range 的位置
+          const newRect = highlightInfo.range.getBoundingClientRect();
+          
+          // 检查元素是否在视口内
+          const isVisible = newRect.top < window.innerHeight && 
+                           newRect.bottom > 0 && 
+                           newRect.width > 0 && 
+                           newRect.height > 0;
+          
+          if (isVisible) {
+              // 更新高亮位置
+              highlightInfo.element.style.left = `${newRect.left}px`;
+              highlightInfo.element.style.top = `${newRect.top}px`;
+              highlightInfo.element.style.width = `${newRect.width}px`;
+              highlightInfo.element.style.height = `${newRect.height}px`;
+              highlightInfo.element.style.opacity = '0.3';
+              highlightInfo.element.style.display = 'block';
+          } else {
+              // 不在视口内时隐藏（而不是移除）
+              highlightInfo.element.style.opacity = '0';
+              // 或者完全隐藏：highlightInfo.element.style.display = 'none';
+          }
+          
+      } catch (error) {
+          console.warn('Word Munch: 更新高亮位置失败:', error);
+          // 如果 range 失效，隐藏这个高亮
+          if (highlightInfo.element) {
+              highlightInfo.element.style.opacity = '0';
+          }
+      }
+  });
+}
+
+// 保留原始高亮方法作为降级方案
+function highlightOriginalTextLegacy(segments) {
+  const originalRange = currentSelection.range;
+  const originalText = currentSelection.text;
+  
+  let currentOffset = 0;
+  segments.forEach((segment, index) => {
+      const segmentStart = originalText.indexOf(segment.text, currentOffset);
+      if (segmentStart === -1) return;
+      
+      try {
           // 创建range for this segment
           const segmentRange = document.createRange();
           segmentRange.setStart(originalRange.startContainer, originalRange.startOffset + segmentStart);
@@ -1214,7 +1414,7 @@ function highlightOriginalText(segments) {
           // 获取segment的位置
           const segmentRect = segmentRange.getBoundingClientRect();
           
-          // 创建高亮元素
+          // 创建高亮元素（使用原始的fixed定位）
           const highlight = document.createElement('div');
           highlight.className = `word-munch-segment-highlight ${segment.level}`;
           highlight.style.position = 'fixed';
@@ -1225,6 +1425,7 @@ function highlightOriginalText(segments) {
           highlight.style.pointerEvents = 'none';
           highlight.style.borderRadius = '3px';
           highlight.style.opacity = '0.3';
+          highlight.style.zIndex = '9999';
           
           // 设置背景颜色
           switch (segment.level) {
@@ -1251,23 +1452,115 @@ function highlightOriginalText(segments) {
           originalHighlightElements.push(highlight);
           
           currentOffset = segmentStart + segment.text.length;
-      });
-      
-      console.log('Word Munch: 原文高亮完成，共', originalHighlightElements.length, '个高亮元素');
-      
-  } catch (error) {
-      console.error('Word Munch: 原文高亮失败:', error);
-  }
+          
+      } catch (error) {
+          console.warn('Word Munch: 创建高亮元素失败:', error);
+      }
+  });
+  
+  console.log('Word Munch: 原始高亮完成，共', originalHighlightElements.length, '个高亮元素');
 }
 
 function clearOriginalHighlights() {
+  console.log('Word Munch: 清理原文高亮');
+  
+  // 停止滚动跟踪
+  stopScrollTracking();
+  
+  // 清理高亮元素
   originalHighlightElements.forEach(element => {
       if (element.parentNode) {
           element.parentNode.removeChild(element);
       }
   });
   originalHighlightElements = [];
+  
+  // 清理高亮数据
+  highlightRanges = [];
+  
   console.log('Word Munch: 原文高亮已清理');
+}
+
+function forceUpdateHighlights() {
+  console.log('Word Munch: 强制更新高亮位置');
+  updateAllHighlightPositions();
+}
+
+//添加高亮状态检查函数
+function getHighlightStatus() {
+  if (highlightManager) {
+      return highlightManager.getStatus();
+  }
+  
+  return {
+      highlightCount: originalHighlightElements.length,
+      isTracking: false,
+      method: 'legacy'
+  };
+}
+
+// 处理页面可见性变化（可选优化）
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden && highlightRanges.length > 0) {
+      // 页面重新可见时更新高亮位置
+      console.log('Word Munch: 页面重新可见，更新高亮位置');
+      setTimeout(() => {
+          forceUpdateHighlights();
+      }, 100);
+  }
+});
+
+// 在页面卸载时清理资源
+window.addEventListener('beforeunload', function() {
+  console.log('Word Munch: 页面卸载，清理高亮资源');
+  stopScrollTracking();
+  clearOriginalHighlights();
+});
+
+window.debugHighlights = function() {
+  console.log('Word Munch: 高亮调试信息:');
+  console.log('- 滚动跟踪状态:', isScrollTracking);
+  console.log('- 高亮数量:', highlightRanges.length);
+  console.log('- 高亮元素数量:', originalHighlightElements.length);
+  console.log('- 高亮数据:', highlightRanges);
+  
+  // 手动触发一次位置更新
+  forceUpdateHighlights();
+  
+  return {
+      tracking: isScrollTracking,
+      highlightCount: highlightRanges.length,
+      elementCount: originalHighlightElements.length
+  };
+};
+
+// 添加高亮管理器的调试函数
+window.getHighlightStatus = function() {
+  const status = getHighlightStatus();
+  console.log('Word Munch: 高亮状态:', status);
+  return status;
+};
+
+// 添加窗口焦点事件处理
+window.addEventListener('focus', function() {
+    // 窗口重新获得焦点时更新高亮位置
+    if (highlightManager && highlightManager.manager.updateHighlightPositions) {
+        setTimeout(() => {
+            highlightManager.manager.updateHighlightPositions();
+        }, 200);
+    }
+});
+
+// 错误处理和降级机制
+function safeHighlightOperation(operation, fallback) {
+  try {
+      return operation();
+  } catch (error) {
+      console.warn('Word Munch: 高亮操作失败，使用降级方案:', error);
+      if (fallback) {
+          return fallback();
+      }
+  }
 }
 
 // === 渲染高亮文本 ===
