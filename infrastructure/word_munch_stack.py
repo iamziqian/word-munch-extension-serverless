@@ -9,6 +9,10 @@ from aws_cdk import (
     RemovalPolicy,
     CfnOutput,
     Tags,
+    aws_cloudwatch as cloudwatch,
+    aws_sns as sns,
+    aws_sns_subscriptions as subs,
+    aws_cloudwatch_actions as cloudwatch_actions,
 )
 from constructs import Construct
 from datetime import datetime
@@ -29,9 +33,9 @@ class WordMunchStack(Stack):
         # ============================================================================
         # DynamoDB Tables
         # {
-        #   "cacheKey": "string",     # 必需：缓存键（主键）
-        #   "data": "string",         # 可选：缓存数据
-        #   "ttl": "number"           # 可选：过期时间戳
+        #   "cacheKey": "string",     # Necessities: Cache Key (Primary Key)
+        #   "data": "string",         # Optional: Cache data
+        #   "ttl": "number"           # Optional: Expiration timestamp
         # }
         # ============================================================================
         
@@ -297,7 +301,7 @@ class WordMunchStack(Stack):
         CfnOutput(
             self, "WordMuncherUrl",
             value=f"{self.api.url}word-muncher",
-            description="Word Muncher Service URL - 递进式词汇简化服务",
+            description="Word Muncher Service URL - Step-by-Step Vocabulary Simplification Service",
             export_name=f"{self.project_name}-word-muncher-url-{self.env_name}"
         )
 
@@ -305,7 +309,7 @@ class WordMunchStack(Stack):
         CfnOutput(
             self, "ConceptMuncherUrl",
             value=f"{self.api.url}concept-muncher",
-            description="Concept Muncher Service URL - 文本理解程度分析服务",
+            description="Concept Muncher Service URL - Text Comprehension Analysis Service",
             export_name=f"{self.project_name}-concept-muncher-url-{self.env_name}"
         )
         
@@ -315,8 +319,136 @@ class WordMunchStack(Stack):
             value=self.cache_table.table_name,
             description="Cache DynamoDB Table Name",
             export_name=f"{self.project_name}-cache-table-{self.env_name}"
-        ) 
+        )
 
+        # ============================================================================
+        # CloudWatch Alarms for Lambda, API Gateway, Bedrock
+        # ============================================================================
+
+        # Word Muncher Lambda Invocations Alarm
+        word_muncher_lambda_invocations_metric = self.word_muncher_lambda.metric_invocations(
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        word_muncher_lambda_alarm = cloudwatch.Alarm(
+            self, "WordMuncherLambdaInvocationsAlarm",
+            metric=word_muncher_lambda_invocations_metric,
+            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when Lambda invocations exceed 100 in 5 minutes"
+        )
+
+        # Concept Muncher Lambda Invocations Alarm 
+        concept_muncher_lambda_invocations_metric = self.concept_muncher_lambda.metric_invocations(
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        concept_muncher_lambda_alarm = cloudwatch.Alarm(
+            self, "ConceptMuncherLambdaInvocationsAlarm",
+            metric=concept_muncher_lambda_invocations_metric,
+            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when Concept Muncher Lambda invocations exceed 100 in 5 minutes"
+        )
+
+        # API Gateway Invocations Alarm
+        api_invoke_metric = cloudwatch.Metric(
+            namespace="AWS/WordMunchApiGateway",
+            metric_name="Count",
+            dimensions_map={
+                "ApiName": f"{self.project_name}-api-{self.env_name}"
+            },
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        api_alarm = cloudwatch.Alarm(
+            self, "ApiGatewayInvocationsAlarm",
+            metric=api_invoke_metric,
+            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when API Gateway invocations exceed 100 in 5 minutes"
+        )
+
+        # Bedrock InvocationCount Alarm (global, all models)
+        bedrock_metric = cloudwatch.Metric(
+            namespace="AWS/WordMunchBedrock",
+            metric_name="InvocationCount",
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        bedrock_alarm = cloudwatch.Alarm(
+            self, "BedrockInvocationAlarm",
+            metric=bedrock_metric,
+            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when Bedrock invocations exceed 100 in 5 minutes"
+        )
+
+        # DynamoDB ConsumedReadCapacityUnits Alarm
+        dynamodb_read_metric = cloudwatch.Metric(
+            namespace="AWS/DynamoDB",
+            metric_name="ConsumedReadCapacityUnits",
+            dimensions_map={
+                "TableName": self.cache_table.table_name
+            },
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        dynamodb_read_alarm = cloudwatch.Alarm(
+            self, "DynamoDBReadCapacityAlarm",
+            metric=dynamodb_read_metric,
+            threshold=100,  # Alarm if more than 100 read units in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when DynamoDB ConsumedReadCapacityUnits exceed 100 in 5 minutes"
+        )
+
+        # DynamoDB ConsumedWriteCapacityUnits Alarm
+        dynamodb_write_metric = cloudwatch.Metric(
+            namespace="AWS/DynamoDB",
+            metric_name="ConsumedWriteCapacityUnits",
+            dimensions_map={
+                "TableName": self.cache_table.table_name
+            },
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+        dynamodb_write_alarm = cloudwatch.Alarm(
+            self, "DynamoDBWriteCapacityAlarm",
+            metric=dynamodb_write_metric,
+            threshold=100,  # Alarm if more than 100 write units in 5 minutes
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when DynamoDB ConsumedWriteCapacityUnits exceed 100 in 5 minutes"
+        )
+
+        # =========================================================================
+        # SNS Topic for Alarm Notifications
+        # =========================================================================
+        alarm_topic = sns.Topic(
+            self, "AlarmNotificationTopic",
+            display_name="Word Munch Alarm Notifications"
+        )
+        # Subscribe to email
+        alarm_topic.add_subscription(subs.EmailSubscription("violetfu0212@gmail.com"))
+
+        # Bind all alarms to SNS Topic
+        word_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        concept_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        api_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        bedrock_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        dynamodb_read_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        dynamodb_write_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
 
     def _apply_common_tags(self, resource, additional_tags=None):
         """Apply common tags to a resource"""
