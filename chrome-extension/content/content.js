@@ -392,9 +392,10 @@ class TextValidator {
 }
 
 // === 浮动窗口管理器 ===
+// === 改进的窗口管理器 - 优化 Concept Muncher 定位 ===
 class WidgetManager {
     static showFloatingWidget(text, selection, type) {
-        console.log('Word Munch: 显示浮动窗口:', text, type);
+        console.log('Word Munch: Show floating widget:', text, type);
         
         const newSelection = {
             text: text,
@@ -408,23 +409,23 @@ class WidgetManager {
                            state.currentSelection.text !== text;
         
         if (needsCleanup) {
-            console.log('Word Munch: 需要清理之前的窗口');
+            console.log('Word Munch: Need to cleanup previous widget');
             this.cleanupPreviousWidget();
         }
         
         // 重新设置选择状态
         state.currentSelection = newSelection;
-        console.log('Word Munch: 设置当前选择状态:', text);
+        console.log('Word Munch: Set current selection state:', text);
         
         // 如果窗口已存在且是相同文本，只需要重新开始处理
         if (state.floatingWidget && state.currentSelection.text === text) {
-            console.log('Word Munch: 窗口已存在，重新开始处理');
+            console.log('Word Munch: Widget exists, restart processing');
             
             const wordCount = text.split(/\s+/).length;
             const isConceptAnalysis = wordCount >= CONFIG.MIN_WORDS_FOR_CONCEPT;
             state.isConceptMode = isConceptAnalysis;
             
-            if (isConceptAnalysis) {
+            if (isConceptAnalysis && state.extensionSettings.conceptMuncherEnabled) {
                 ConceptAnalyzer.fillContextInformation(text);
             } else {
                 APIManager.startSimplification(text, 'word');
@@ -441,47 +442,31 @@ class WidgetManager {
         state.floatingWidget.className = 'word-munch-floating-widget';
         
         const wordCount = text.split(/\s+/).length;
-        const isConceptAnalysis = wordCount >= CONFIG.MIN_WORDS_FOR_CONCEPT;
+        const isConceptAnalysis = wordCount >= CONFIG.MIN_WORDS_FOR_CONCEPT && 
+                                  state.extensionSettings.conceptMuncherEnabled;
         state.isConceptMode = isConceptAnalysis;
         
-        const widgetWidth = isConceptAnalysis ? 400 : 300;
-        const widgetHeight = isConceptAnalysis ? 500 : 200; // 估算高度
+        console.log('Word Munch: Widget mode decision - Word count:', wordCount, 'Min required:', CONFIG.MIN_WORDS_FOR_CONCEPT, 'Concept enabled:', state.extensionSettings.conceptMuncherEnabled, 'Final mode:', isConceptAnalysis ? 'concept' : 'word');
         
-        // 智能位置计算
+        const widgetWidth = isConceptAnalysis ? 400 : 300;
+        const widgetHeight = isConceptAnalysis ? 500 : 200;
+        
+        // ===== 改进的智能位置计算 =====
         let x, y;
         
         if (isConceptAnalysis) {
-            // Concept Muncher: 优先显示在屏幕中心附近
-            console.log('Word Munch: Concept Muncher 使用中心定位');
+            // Concept Muncher: 优先显示在右边，避免遮挡文字
+            console.log('Word Munch: Concept Muncher using right-side positioning');
             
-            const centerX = window.innerWidth / 2 - widgetWidth / 2;
-            const centerY = window.innerHeight / 2 - widgetHeight / 2;
+            const position = this.calculateConceptWindowPosition(rect, widgetWidth, widgetHeight);
+            x = position.x;
+            y = position.y;
             
-            // 检查选择区域位置，避免遮挡
-            const selectionCenterY = rect.top + rect.height / 2;
-            
-            if (Math.abs(selectionCenterY - centerY) < 100) {
-                // 如果选择区域太接近中心，偏移窗口位置
-                if (selectionCenterY < window.innerHeight / 2) {
-                    // 选择在上半部分，窗口显示在下半部分
-                    y = Math.min(centerY + 150, window.innerHeight - widgetHeight - 20);
-                } else {
-                    // 选择在下半部分，窗口显示在上半部分
-                    y = Math.max(centerY - 150, 20);
-                }
-            } else {
-                y = centerY;
-            }
-            
-            x = centerX;
-            
-            // 边界检查
-            x = Math.max(20, Math.min(x, window.innerWidth - widgetWidth - 20));
-            y = Math.max(20, Math.min(y, window.innerHeight - widgetHeight - 20));
+            console.log('Word Munch: Concept window position:', position);
             
         } else {
             // Word Muncher: 使用原来的逻辑（靠近选择区域）
-            console.log('Word Munch: Word Muncher 使用选择区域定位');
+            console.log('Word Munch: Word Muncher using selection area positioning');
             x = Math.min(rect.left, window.innerWidth - widgetWidth - 20);
             y = rect.bottom + 10 > window.innerHeight - 100 ? rect.top - 10 : rect.bottom + 10;
             
@@ -490,7 +475,7 @@ class WidgetManager {
             y = Math.max(20, Math.min(y, window.innerHeight - 200));
         }
         
-        console.log('Word Munch: 窗口位置计算结果:', { x, y, widgetWidth, isConceptAnalysis });
+        console.log('Word Munch: Final widget position:', { x, y, widgetWidth, isConceptAnalysis });
         
         state.floatingWidget.style.left = `${x}px`;
         state.floatingWidget.style.top = `${y}px`;
@@ -502,7 +487,7 @@ class WidgetManager {
         const isInReaderMode = document.getElementById('word-munch-reader-container');
         if (isInReaderMode) {
             state.floatingWidget.style.zIndex = '2147483648';
-            console.log('Word Munch: 阅读模式中，使用更高 z-index');
+            console.log('Word Munch: In reader mode, using higher z-index');
         }
         
         let content;
@@ -514,7 +499,7 @@ class WidgetManager {
         
         state.floatingWidget.innerHTML = content;
         document.body.appendChild(state.floatingWidget);
-        console.log('Word Munch: 新浮动窗口已添加到DOM');
+        console.log('Word Munch: New floating widget added to DOM');
         
         DragHandler.makeDraggable(state.floatingWidget);
         
@@ -522,7 +507,7 @@ class WidgetManager {
         setTimeout(() => {
             if (state.floatingWidget) {
                 state.floatingWidget.classList.add('show');
-                console.log('Word Munch: 触发显示动画');
+                console.log('Word Munch: Trigger show animation');
             }
         }, 10);
         
@@ -536,6 +521,167 @@ class WidgetManager {
         }
     }
 
+    /**
+     * 计算 Concept Muncher 窗口的最佳位置
+     * 优先级：右边 > 左边 > 下方 > 上方 > 中心
+     */
+    static calculateConceptWindowPosition(selectionRect, widgetWidth, widgetHeight) {
+        const margin = 20; // 窗口边缘留白
+        const gap = 15; // 窗口与选择文本的间距
+        
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // 选择区域的基本信息
+        const selectionCenterX = selectionRect.left + selectionRect.width / 2;
+        const selectionCenterY = selectionRect.top + selectionRect.height / 2;
+        
+        console.log('Word Munch: Selection rect:', {
+            left: selectionRect.left,
+            top: selectionRect.top,
+            width: selectionRect.width,
+            height: selectionRect.height,
+            centerX: selectionCenterX,
+            centerY: selectionCenterY
+        });
+        
+        // 位置选项（按优先级排序）
+        const positionOptions = [
+            // 1. 右边优先 - 最佳选择
+            {
+                name: 'right',
+                x: selectionRect.right + gap,
+                y: Math.max(margin, selectionCenterY - widgetHeight / 2),
+                priority: 1
+            },
+            
+            // 2. 左边 - 次优选择
+            {
+                name: 'left',
+                x: selectionRect.left - widgetWidth - gap,
+                y: Math.max(margin, selectionCenterY - widgetHeight / 2),
+                priority: 2
+            },
+            
+            // 3. 右下角
+            {
+                name: 'right-bottom',
+                x: selectionRect.right + gap,
+                y: selectionRect.bottom + gap,
+                priority: 3
+            },
+            
+            // 4. 左下角
+            {
+                name: 'left-bottom',
+                x: selectionRect.left - widgetWidth - gap,
+                y: selectionRect.bottom + gap,
+                priority: 4
+            },
+            
+            // 5. 下方中心
+            {
+                name: 'bottom-center',
+                x: Math.max(margin, selectionCenterX - widgetWidth / 2),
+                y: selectionRect.bottom + gap,
+                priority: 5
+            },
+            
+            // 6. 上方中心
+            {
+                name: 'top-center',
+                x: Math.max(margin, selectionCenterX - widgetWidth / 2),
+                y: selectionRect.top - widgetHeight - gap,
+                priority: 6
+            },
+            
+            // 7. 屏幕中心 - 最后选择
+            {
+                name: 'center',
+                x: viewportWidth / 2 - widgetWidth / 2,
+                y: viewportHeight / 2 - widgetHeight / 2,
+                priority: 7
+            }
+        ];
+        
+        // 检查每个位置是否可用
+        for (const option of positionOptions) {
+            const isValid = this.isPositionValid(option.x, option.y, widgetWidth, widgetHeight, margin);
+            const overlapScore = this.calculateOverlapScore(option.x, option.y, widgetWidth, widgetHeight, selectionRect);
+            
+            console.log(`Word Munch: Position ${option.name}:`, {
+                x: option.x,
+                y: option.y,
+                valid: isValid,
+                overlapScore: overlapScore
+            });
+            
+            if (isValid && overlapScore < 0.3) { // 重叠度小于30%
+                return {
+                    x: option.x,
+                    y: option.y,
+                    position: option.name,
+                    overlapScore: overlapScore
+                };
+            }
+        }
+        
+        // 如果所有位置都有问题，选择重叠度最小的
+        const bestOption = positionOptions
+            .map(option => ({
+                ...option,
+                overlapScore: this.calculateOverlapScore(option.x, option.y, widgetWidth, widgetHeight, selectionRect)
+            }))
+            .sort((a, b) => a.overlapScore - b.overlapScore)[0];
+        
+        // 确保最终位置在屏幕内
+        return {
+            x: Math.max(margin, Math.min(bestOption.x, viewportWidth - widgetWidth - margin)),
+            y: Math.max(margin, Math.min(bestOption.y, viewportHeight - widgetHeight - margin)),
+            position: bestOption.name + '-fallback',
+            overlapScore: bestOption.overlapScore
+        };
+    }
+    
+    /**
+     * 检查位置是否在屏幕范围内
+     */
+    static isPositionValid(x, y, width, height, margin) {
+        return x >= margin && 
+               y >= margin && 
+               x + width <= window.innerWidth - margin && 
+               y + height <= window.innerHeight - margin;
+    }
+    
+    /**
+     * 计算窗口与选择区域的重叠度（0-1，0表示无重叠）
+     */
+    static calculateOverlapScore(windowX, windowY, windowWidth, windowHeight, selectionRect) {
+        const windowRight = windowX + windowWidth;
+        const windowBottom = windowY + windowHeight;
+        const selectionRight = selectionRect.left + selectionRect.width;
+        const selectionBottom = selectionRect.top + selectionRect.height;
+        
+        // 计算重叠区域
+        const overlapLeft = Math.max(windowX, selectionRect.left);
+        const overlapTop = Math.max(windowY, selectionRect.top);
+        const overlapRight = Math.min(windowRight, selectionRight);
+        const overlapBottom = Math.min(windowBottom, selectionBottom);
+        
+        // 如果没有重叠
+        if (overlapLeft >= overlapRight || overlapTop >= overlapBottom) {
+            return 0;
+        }
+        
+        // 计算重叠面积
+        const overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop);
+        const selectionArea = selectionRect.width * selectionRect.height;
+        
+        // 返回重叠度（相对于选择区域的比例）
+        return selectionArea > 0 ? overlapArea / selectionArea : 0;
+    }
+
+    // === 其他方法保持不变 ===
     static setupWidgetEvents(text, type) {
         const widget = state.floatingWidget;
         if (!widget) return;
@@ -627,7 +773,7 @@ class WidgetManager {
     }
 
     static cleanupPreviousWidget() {
-        console.log('Word Munch: 清理之前的浮动窗口');
+        console.log('Word Munch: Cleanup previous floating widget');
         
         state.cancelCurrentRequest();
         eventManager.removeOutsideClickListener();
@@ -650,7 +796,7 @@ class WidgetManager {
     }
 
     static closeFloatingWidget() {
-        console.log('Word Munch: 完全关闭浮动窗口');
+        console.log('Word Munch: Completely close floating widget');
         
         state.cancelCurrentRequest();
         state.pendingSelection = null;
