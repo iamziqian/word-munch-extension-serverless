@@ -1,13 +1,13 @@
-// ========== Word Munch Content Script - 重构版本 ==========
+// ========== Word Munch Content Script ==========
 
-// === 配置常量 ===
+// === Configuration Constants ===
 const CONFIG = {
     CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
     MIN_WORDS_FOR_CONCEPT: 6,
     MEMORY_CACHE_TIME: 3000
 };
 
-// === 全局状态管理 ===
+// === Global State Management ===
 class ContentScriptState {
     constructor() {
         this.selectedText = '';
@@ -64,10 +64,10 @@ class ContentScriptState {
             }
             
             this.settingsLoaded = true;
-            console.log('Word Munch: 设置已加载:', this.extensionSettings);
+            console.log('Word Munch: Settings loaded:', this.extensionSettings);
             
         } catch (error) {
-            console.error('Word Munch: 加载设置失败:', error);
+            console.error('Word Munch: Failed to load settings:', error);
             this.settingsLoaded = true; // 即使失败也标记为已尝试加载
         }
     }
@@ -82,7 +82,7 @@ class ContentScriptState {
     }
 
     cancelCurrentRequest() {
-        console.log('Word Munch: 取消当前请求');
+        console.log('Word Munch: Cancel current request');
         
         if (this.requestTimeout) {
             clearTimeout(this.requestTimeout);
@@ -97,7 +97,7 @@ class ContentScriptState {
 
 const state = new ContentScriptState();
 
-// === 事件监听器管理 ===
+// === Event Listener Management ===
 class EventManager {
     constructor() {
         this.selectionTimer = null;
@@ -109,7 +109,7 @@ class EventManager {
         document.addEventListener('keyup', this.handleTextSelection.bind(this));
         document.addEventListener('dblclick', this.handleTextSelection.bind(this));
         
-        // Chrome 消息监听
+        // Chrome message listener
         chrome.runtime.onMessage.addListener(this.handleChromeMessage.bind(this));
     }
 
@@ -117,24 +117,24 @@ class EventManager {
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
         
-        console.log('Word Munch: 文本选择事件触发，选中文本:', selectedText);
+        console.log('Word Munch: Text selection event triggered, selected text:', selectedText);
 
-        // 快速处理理解分析模式下的单词选择
+        // Fast processing of word selection in understanding analysis mode
         if (state.isConceptMode && state.highlightRanges && state.highlightRanges.length > 0) {
             if (selectedText && TextValidator.isValidWord(selectedText)) {
-                console.log('Word Munch: 在高亮区域选择单词，创建独立词汇窗口');
+                console.log('Word Munch: Select word in highlight area, create independent word window');
                 WidgetManager.createIndependentWordWindow(selectedText, selection);
                 return;
             }
         }
         
-        // 检查是否在阅读模式中
+        // Check if in reading mode
         const isInReaderMode = document.getElementById('word-munch-reader-container');
         if (isInReaderMode) {
-            console.log('Word Munch: 在阅读模式中，确保文本选择正常工作');
-            // 在阅读模式中，我们需要确保文本选择不被其他事件干扰
+            console.log('Word Munch: In reader mode, ensure text selection works normally');
+            // In reading mode, we need to ensure that text selection is not interfered with by other events
             if (selectedText && selectedText.length > 0) {
-                // 延迟处理，确保选择事件完成
+                // Delay processing to ensure the selection event is completed
                 setTimeout(() => {
                     this.processTextSelectionInReaderMode(selectedText, selection);
                 }, 10);
@@ -142,41 +142,41 @@ class EventManager {
             }
         }
         
-        // 等待设置加载完成后再检查扩展状态
+        // Wait for settings to load before checking extension status
         if (!state.settingsLoaded) {
-            console.log('Word Munch: 设置未加载完成，延迟处理');
+            console.log('Word Munch: Settings not loaded yet, delay processing');
             setTimeout(() => {
                 this.handleTextSelection(event);
             }, 100);
             return;
         }
         
-        // 检查扩展是否被禁用
+        // Check if extension is disabled
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，跳过处理');
+            console.log('Word Munch: Extension disabled, skip processing');
             return;
         }
         
-        // 处理空选择 - 但要避免在正常选择时误触发
+        // Process empty selection - but avoid triggering when normal selection is happening
         if (!selectedText || selectedText.length === 0) {
-            // 只有在非理解分析模式且没有正在处理的选择时才关闭
+            // Only close the floating widget when not in understanding analysis mode and no selection is being processed
             if (!state.isConceptMode && !state.currentSelection) {
-                console.log('Word Munch: 空选择，关闭浮动窗口');
+                console.log('Word Munch: Empty selection, close floating widget');
                 WidgetManager.closeFloatingWidget();
             }
             return;
         }
         
-        // 避免重复处理相同文本 - 但要检查窗口是否真的存在且可见
+        // Avoid processing the same text repeatedly - but check if the window really exists and is visible
         if (state.currentSelection && 
             state.currentSelection.text === selectedText && 
             state.floatingWidget && 
             state.floatingWidget.classList.contains('show')) {
-            console.log('Word Munch: 重复选择同一文本且窗口可见，跳过处理');
+            console.log('Word Munch: Duplicate selection of same text and widget visible, skip processing');
             return;
         }
 
-        // 减少防抖延迟，避免快速选择失效
+        // Reduce debounce delay to avoid fast selection failure
         if (this.selectionTimer) {
             clearTimeout(this.selectionTimer);
         }
@@ -193,11 +193,11 @@ class EventManager {
 
     // 在阅读模式中处理文本选择
     processTextSelectionInReaderMode(selectedText, selection) {
-        console.log('Word Munch: 阅读模式中的文本选择:', selectedText);
+        console.log('Word Munch: Text selection in reader mode:', selectedText);
         
         // 检查扩展是否启用
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，跳过阅读模式中的处理');
+            console.log('Word Munch: Extension disabled, skip processing in reader mode');
             return;
         }
         
@@ -214,11 +214,11 @@ class EventManager {
     processTextSelection(selectionData) {
         const { text, selection, range, isInReaderMode } = selectionData;
         
-        console.log('Word Munch: 开始处理文本选择:', text, isInReaderMode ? '(阅读模式)' : '');
+        console.log('Word Munch: Start processing text selection:', text, isInReaderMode ? '(Reader Mode)' : '');
         
         // 再次检查扩展状态（防止在防抖延迟期间状态改变）
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 处理时发现扩展已禁用，取消处理');
+            console.log('Word Munch: Extension disabled during processing, cancel processing');
             return;
         }
         
@@ -233,26 +233,26 @@ class EventManager {
             isInReaderMode: isInReaderMode || false
         };
         
-        console.log('Word Munch: 设置当前选择:', text);
+        console.log('Word Munch: Set current selection:', text);
         
         // 根据文本类型决定处理方式
         if (TextValidator.isValidWord(text)) {
-            console.log('Word Munch: 识别为有效单词，显示词汇窗口');
+            console.log('Word Munch: Identified as valid word, show word window');
             WidgetManager.showFloatingWidget(text, selection, 'word');
         } else if (TextValidator.isValidSentence(text) && state.extensionSettings.conceptMuncherEnabled) {
-            console.log('Word Munch: 识别为有效句子，显示理解分析窗口');
+            console.log('Word Munch: Identified as valid sentence, show concept analysis window');
             WidgetManager.showFloatingWidget(text, selection, 'sentence');
         } else if (TextValidator.isValidSentence(text)) {
-            console.log('Word Munch: 识别为句子但理解分析已禁用，使用词汇模式');
+            console.log('Word Munch: Identified as sentence but concept analysis disabled, use word mode');
             WidgetManager.showFloatingWidget(text, selection, 'sentence');
         } else {
-            console.log('Word Munch: 无效文本，关闭窗口');
+            console.log('Word Munch: Invalid text, close window');
             WidgetManager.closeFloatingWidget();
         }
     }
 
     handleChromeMessage(message, sender, sendResponse) {
-        console.log('Word Munch: 收到 background 消息:', message.type);
+        console.log('Word Munch: Received background message:', message.type);
         
         try {
             switch (message.type) {
@@ -272,12 +272,12 @@ class EventManager {
                     MessageHandlers.handleSettingsUpdated(message.settings);
                     break;
                 default:
-                    console.log('Word Munch: 未知消息类型:', message.type);
+                    console.log('Word Munch: Unknown message type:', message.type);
             }
             
             sendResponse({ received: true, timestamp: Date.now() });
         } catch (error) {
-            console.error('Word Munch: 处理 background 消息失败:', error);
+            console.error('Word Munch: Failed to handle background message:', error);
             sendResponse({ error: error.message });
         }
         
@@ -288,7 +288,7 @@ class EventManager {
         if (!state.outsideClickListenerActive) {
             document.addEventListener('click', this.handleOutsideClick.bind(this), true);
             state.outsideClickListenerActive = true;
-            console.log('Word Munch: 外部点击监听器已添加');
+            console.log('Word Munch: Outside click listener added');
         }
     }
 
@@ -296,21 +296,21 @@ class EventManager {
         if (state.outsideClickListenerActive) {
             document.removeEventListener('click', this.handleOutsideClick.bind(this), true);
             state.outsideClickListenerActive = false;
-            console.log('Word Munch: 外部点击监听器已移除');
+            console.log('Word Munch: Outside click listener removed');
         }
     }
 
     handleOutsideClick(event) {
-        console.log('Word Munch: 外部点击事件触发，目标:', event.target.tagName);
+        console.log('Word Munch: Outside click event triggered, target:', event.target.tagName);
         
         if (state.isDragging || !state.floatingWidget) {
-            console.log('Word Munch: 跳过外部点击处理 - 拖拽中或无窗口');
+            console.log('Word Munch: Skip outside click handling - dragging or no widget');
             return;
         }
         
         // 如果点击的是浮动窗口内部，不关闭
         if (state.floatingWidget.contains(event.target)) {
-            console.log('Word Munch: 点击在浮动窗口内部，不关闭');
+            console.log('Word Munch: Click inside floating widget, do not close');
             return;
         }
         
@@ -320,9 +320,9 @@ class EventManager {
             if (clickedElement.tagName === 'INPUT' || 
                 clickedElement.tagName === 'TEXTAREA' ||
                 clickedElement.contentEditable === 'true' ||
-                clickedElement.closest('.concept-understanding-input') ||
-                clickedElement.closest('.concept-content')) {
-                console.log('Word Munch: 点击在输入区域，不关闭理解分析窗口');
+                clickedElement.closest('.concept-understanding-input-minimal') ||
+                clickedElement.closest('.concept-content-minimal')) {
+                console.log('Word Munch: Click in input area, do not close concept analysis window');
                 return;
             }
         }
@@ -336,12 +336,12 @@ class EventManager {
                 event.clientX <= rect.right + padding && 
                 event.clientY >= rect.top - padding && 
                 event.clientY <= rect.bottom + padding) {
-                console.log('Word Munch: 点击在选中区域内，不关闭');
+                console.log('Word Munch: Click within selected area, do not close');
                 return;
             }
         }
         
-        console.log('Word Munch: 确认外部点击，关闭浮动窗口');
+        console.log('Word Munch: Confirmed outside click, close floating widget');
         WidgetManager.closeFloatingWidget();
     }
 }
@@ -350,18 +350,18 @@ class EventManager {
 class TextValidator {
     static isValidWord(text) {
         if (!text || text.length === 0) {
-            console.log('Word Munch: 文本验证失败 - 空文本');
+            console.log('Word Munch: Text validation failed - empty text');
             return false;
         }
         
         if (/\s/.test(text)) {
-            console.log('Word Munch: 文本验证失败 - 包含空格:', text);
+            console.log('Word Munch: Text validation failed - contains spaces:', text);
             return false;
         }
         
         const wordCount = text.split(/\s+/).length;
         if (wordCount >= CONFIG.MIN_WORDS_FOR_CONCEPT) {
-            console.log('Word Munch: 文本验证失败 - 词汇数超过阈值:', wordCount, 'vs', CONFIG.MIN_WORDS_FOR_CONCEPT);
+            console.log('Word Munch: Text validation failed - word count exceeds threshold:', wordCount, 'vs', CONFIG.MIN_WORDS_FOR_CONCEPT);
             return false;
         }
         
@@ -371,11 +371,11 @@ class TextValidator {
         
         // 额外检查：确保是合理的英文单词（允许常见的长单词）
         if (!isValid && /^[a-zA-Z]+$/.test(text) && text.length <= 20) {
-            console.log('Word Munch: 通过英文单词备选验证:', text);
+            console.log('Word Munch: Passed through English word alternative validation:', text);
             return true;
         }
         
-        console.log('Word Munch: 文本验证结果:', text, '-> 有效词汇:', isValid, '长度:', text.length);
+        console.log('Word Munch: Text validation result:', text, '-> Valid word:', isValid, 'Length:', text.length);
         return isValid;
     }
 
@@ -448,8 +448,8 @@ class WidgetManager {
         
         console.log('Word Munch: Widget mode decision - Word count:', wordCount, 'Min required:', CONFIG.MIN_WORDS_FOR_CONCEPT, 'Concept enabled:', state.extensionSettings.conceptMuncherEnabled, 'Final mode:', isConceptAnalysis ? 'concept' : 'word');
         
-        const widgetWidth = isConceptAnalysis ? 400 : 300;
-        const widgetHeight = isConceptAnalysis ? 500 : 200;
+        const widgetWidth = isConceptAnalysis ? 350 : 300; // 减少 Concept Muncher 宽度
+        const widgetHeight = isConceptAnalysis ? 280 : 200; // 减少 Concept Muncher 高度
         
         // ===== 改进的智能位置计算 =====
         let x, y;
@@ -707,36 +707,71 @@ class WidgetManager {
 
     static setupWordMuncherEvents(text) {
         const widget = state.floatingWidget;
+        if (!widget) return;
+        
+        // 检查是否在阅读模式中
+        const isInReaderMode = document.getElementById('word-munch-reader-container');
         
         const simplifyBtn = widget.querySelector('.wm-simplify-btn');
         if (simplifyBtn) {
-            simplifyBtn.addEventListener('click', (e) => {
+            // 移除可能存在的旧事件监听器
+            simplifyBtn.replaceWith(simplifyBtn.cloneNode(true));
+            const newSimplifyBtn = widget.querySelector('.wm-simplify-btn');
+            
+            // 使用更强的事件绑定
+            const handleSimplifyClick = (e) => {
+                e.preventDefault();
                 e.stopPropagation();
+                console.log('Word Munch: Simplify button clicked in reader mode:', isInReaderMode ? 'YES' : 'NO');
                 ResultDisplayer.showNextSynonym();
-            });
+            };
+            
+            newSimplifyBtn.addEventListener('click', handleSimplifyClick, { capture: true });
+            
+            // 在阅读模式中添加额外的事件监听
+            if (isInReaderMode) {
+                newSimplifyBtn.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, { capture: true });
+                
+                newSimplifyBtn.addEventListener('mouseup', handleSimplifyClick, { capture: true });
+            }
         }
         
         const copyBtn = widget.querySelector('.wm-copy-btn');
         if (copyBtn) {
-            copyBtn.addEventListener('click', (e) => {
+            // 同样的处理方式
+            copyBtn.replaceWith(copyBtn.cloneNode(true));
+            const newCopyBtn = widget.querySelector('.wm-copy-btn');
+            
+            const handleCopyClick = (e) => {
+                e.preventDefault();
                 e.stopPropagation();
+                console.log('Word Munch: Copy button clicked in reader mode:', isInReaderMode ? 'YES' : 'NO');
                 ResultDisplayer.copySynonymToClipboard();
-            });
+            };
+            
+            newCopyBtn.addEventListener('click', handleCopyClick, { capture: true });
+            
+            if (isInReaderMode) {
+                newCopyBtn.addEventListener('mouseup', handleCopyClick, { capture: true });
+            }
         }
-    }
+    }    
 
     static setupConceptMuncherEvents(text) {
         const widget = state.floatingWidget;
         
-        const understandingInput = widget.querySelector('.concept-understanding-input');
-        const analyzeBtn = widget.querySelector('.concept-analyze-btn');
+        const understandingInput = widget.querySelector('.concept-understanding-input-minimal');
+        const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
         
         if (understandingInput && analyzeBtn) {
             understandingInput.addEventListener('input', () => {
                 const hasInput = understandingInput.value.trim().length > 0;
                 analyzeBtn.disabled = !hasInput;
                 
-                const errorElement = widget.querySelector('.concept-error');
+                const errorElement = widget.querySelector('.concept-error-minimal');
                 if (errorElement) {
                     errorElement.style.display = 'none';
                 }
@@ -843,80 +878,104 @@ class ContentTemplates {
             <div class="wm-content">
                 <div class="wm-loading">
                     <div class="wm-spinner"></div>
-                    <span>简化中...</span>
+                    <span>Simplifying...</span>
                 </div>
                 
                 <div class="wm-result">
-                    <div class="wm-synonym"></div>
+                    <div class="wm-synonym-container">
+                        <div class="wm-synonym"></div>
+                        <div class="wm-position-indicator" style="display: none;">
+                            <div class="position-dots"></div>
+                        </div>
+                    </div>
                     <div class="wm-buttons">
-                        <button class="wm-btn wm-btn-primary wm-simplify-btn" title="换一个"></button>
-                        <button class="wm-btn wm-btn-secondary wm-copy-btn" title="复制"></button>
+                        <button class="wm-btn wm-btn-primary wm-simplify-btn" title="Next"></button>
+                        <button class="wm-btn wm-btn-secondary wm-copy-btn" title="Copy"></button>
                     </div>
                 </div>
                 
                 <div class="wm-error">
-                    <!-- 错误信息显示在这里 -->
+                    <!-- Error messages display here -->
                 </div>
             </div>
         `;
+    }    
+
+    // Add position indicator update logic
+    static updatePositionIndicator() {
+        if (!state.floatingWidget || !state.currentResult || !state.currentResult.synonyms) {
+            return;
+        }
+        
+        const indicatorEl = state.floatingWidget.querySelector('.wm-position-indicator');
+        const dotsContainer = state.floatingWidget.querySelector('.position-dots');
+        
+        if (!indicatorEl || !dotsContainer) return;
+        
+        const total = state.currentResult.synonyms.length;
+        const current = state.currentSynonymIndex;
+        
+        // Only show indicator when there are multiple synonyms
+        if (total > 1) {
+            indicatorEl.style.display = 'block';
+            
+            // Create dots
+            dotsContainer.innerHTML = '';
+            for (let i = 0; i < total; i++) {
+                const dot = document.createElement('div');
+                dot.className = `position-dot ${i === current ? 'active' : ''}`;
+                dot.title = `Synonym ${i + 1}`;
+                dotsContainer.appendChild(dot);
+            }
+        } else {
+            indicatorEl.style.display = 'none';
+        }
     }
 
     static createConceptMuncherContent(text) {
-        const displayText = text.length > 80 ? text.substring(0, 80) + '...' : text;
+        const displayText = text.length > 50 ? text.substring(0, 50) + '...' : text;
         const wordCount = text.split(/\s+/).length;
         
         return `
             <div class="wm-header concept-header">
                 <div class="wm-header-text drag-handle">
-                    🧠 理解分析 (${wordCount}词)
+                    🧠 Understanding (${wordCount} words)
                 </div>
                 <button class="wm-close-btn">×</button>
             </div>
             
-            <div class="wm-content concept-content">
-                <!-- 选中文本显示 -->
-                <div class="concept-selected-text">
-                    <div class="concept-text-label">选中文本：</div>
-                    <div class="concept-text-content">${this.escapeHtml(displayText)}</div>
-                </div>
-                
-                <!-- 理解输入区 -->
-                <div class="concept-input-section">
-                    <div class="concept-input-label">💭 您的理解：</div>
+            <div class="wm-content concept-content-minimal">
+                <!-- Input section -->
+                <div class="concept-input-minimal">
                     <textarea 
-                        class="concept-understanding-input" 
-                        placeholder="请用一句话表达您对上述文本的理解..."
-                        rows="3"
+                        class="concept-understanding-input-minimal" 
+                        placeholder="Your understanding in one sentence..."
+                        rows="2"
                     ></textarea>
                 </div>
                 
-                <!-- 上下文信息 -->
-                <div class="concept-context-section">
-                    <div class="concept-context-label">🔍 上下文：</div>
-                    <div class="concept-context-content">正在提取...</div>
-                </div>
-                
-                <!-- 操作按钮 -->
-                <div class="concept-buttons">
-                    <button class="wm-btn wm-btn-primary concept-analyze-btn" disabled>
-                        分析理解程度
+                <!-- Action section -->
+                <div class="concept-action-minimal">
+                    <button class="wm-btn wm-btn-primary concept-analyze-btn-minimal" disabled>
+                        Analyze Understanding
                     </button>
+                    <div class="concept-cost-minimal">Cost: ~$0.0002</div>
                 </div>
                 
-                <!-- 加载状态 -->
-                <div class="concept-loading" style="display: none;">
+                <!-- Loading state -->
+                <div class="concept-loading-minimal" style="display: none;">
                     <div class="wm-spinner"></div>
-                    <span>AI正在分析理解程度...</span>
+                    <span>Analyzing...</span>
                 </div>
                 
-                <!-- 分析结果 -->
-                <div class="concept-results" style="display: none;">
-                    <!-- 结果内容将在这里动态填充 -->
+                <!-- Results - Minimal display -->
+                <div class="concept-results-minimal" style="display: none;">
+                    <!-- Results will be populated here -->
                 </div>
                 
-                <!-- 错误信息 -->
-                <div class="concept-error" style="display: none;">
-                    <!-- 错误信息显示在这里 -->
+                <!-- Error display -->
+                <div class="concept-error-minimal" style="display: none;">
+                    <!-- Error messages display here -->
                 </div>
             </div>
         `;
@@ -998,19 +1057,19 @@ class APIManager {
     static startSimplification(text, type) {
         // 重要：在API调用前再次检查扩展状态
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，取消API调用');
+            console.log('Word Munch: Extension disabled, cancel API call');
             WidgetManager.closeFloatingWidget();
             return;
         }
         
         const context = state.currentSelection ? this.getContextAroundSelection(state.currentSelection.selection) : '';
         
-        console.log('Word Munch: 开始简化:', text, type);
+        console.log('Word Munch: Start simplification:', text, type);
         
         // 检查缓存
         const now = Date.now();
         if (state.lastWordText === text && state.lastWordResult && (now - state.lastResultTime) < 5000) {
-            console.log('Word Munch: 使用最近的缓存结果立即显示');
+            console.log('Word Munch: Use recent cached result for immediate display');
             ResultDisplayer.showSimplificationResult(state.lastWordResult);
             return;
         }
@@ -1024,8 +1083,8 @@ class APIManager {
         
         state.requestTimeout = setTimeout(() => {
             if (state.currentRequestId === requestId && state.floatingWidget) {
-                console.warn('Word Munch: 简化请求超时:', text);
-                ResultDisplayer.showSimplificationError('请求超时，请重试');
+                console.warn('Word Munch: Simplification request timeout:', text);
+                ResultDisplayer.showSimplificationError('Request timeout, please retry');
                 state.currentRequestId = null;
                 state.requestTimeout = null;
             }
@@ -1080,43 +1139,43 @@ class APIManager {
         message.messageId = messageId;
         message.timestamp = Date.now();
         
-        console.log('Word Munch: 发送消息到 background:', message.type, messageId);
+        console.log('Word Munch: Send message to background:', message.type, messageId);
         
         try {
             chrome.runtime.sendMessage(message, (response) => {
                 if (chrome.runtime.lastError) {
                     if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
-                        console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
-                        ResultDisplayer.showSimplificationError('扩展需要刷新，请刷新页面后重试');
+                        console.log('Word Munch: Extension context invalidated, suggest page refresh');
+                        ResultDisplayer.showSimplificationError('Extension needs refresh, please refresh page and retry');
                         return;
                     }
-                    console.error('Word Munch: 消息发送失败:', chrome.runtime.lastError.message);
-                    ResultDisplayer.showSimplificationError('连接扩展失败，请重试');
+                    console.error('Word Munch: Message send failed:', chrome.runtime.lastError.message);
+                    ResultDisplayer.showSimplificationError('Connection to extension failed, please retry');
                     return;
                 }
                 
                 if (response) {
-                    console.log('Word Munch: 收到 background 响应:', response);
+                    console.log('Word Munch: Received background response:', response);
                     
                     if (response.received) {
-                        console.log('Word Munch: 消息已被 background 接收');
+                        console.log('Word Munch: Message received by background');
                     } else if (response.error) {
-                        console.error('Word Munch: Background 处理错误:', response.error);
+                        console.error('Word Munch: Background processing error:', response.error);
                         ResultDisplayer.showSimplificationError(response.error);
                     }
                 } else {
-                    console.warn('Word Munch: 未收到 background 响应');
-                    ResultDisplayer.showSimplificationError('未收到响应，请重试');
+                    console.warn('Word Munch: No response from background');
+                    ResultDisplayer.showSimplificationError('No response received, please retry');
                 }
             });
         } catch (error) {
             if (error.message && error.message.includes('Extension context invalidated')) {
-                console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
-                ResultDisplayer.showSimplificationError('扩展需要刷新，请刷新页面后重试');
+                console.log('Word Munch: Extension context invalidated, suggest page refresh');
+                ResultDisplayer.showSimplificationError('Extension needs refresh, please refresh page and retry');
                 return;
             }
-            console.error('Word Munch: 发送消息异常:', error);
-            ResultDisplayer.showSimplificationError('发送请求失败，请重试');
+            console.error('Word Munch: Send message exception:', error);
+            ResultDisplayer.showSimplificationError('Failed to send request, please retry');
         }
     }
 }
@@ -1125,11 +1184,11 @@ class APIManager {
 class ResultDisplayer {
     static showSimplificationResult(result) {
         if (!state.floatingWidget) {
-            console.log('Word Munch: 浮动窗口不存在，无法显示结果');
+            console.log('Word Munch: Floating widget does not exist, cannot display result');
             return;
         }
         
-        console.log('Word Munch: 显示简化结果:', result);
+        console.log('Word Munch: Display simplification result:', result);
         
         state.currentResult = result;
         state.currentSynonymIndex = 0;
@@ -1139,28 +1198,39 @@ class ResultDisplayer {
         const errorEl = state.floatingWidget.querySelector('.wm-error');
         
         if (result && result.synonyms && result.synonyms.length > 0) {
-            console.log('Word Munch: 找到', result.synonyms.length, '个同义词');
+            console.log('Word Munch: Found', result.synonyms.length, 'synonyms');
             
             if (loadingEl) loadingEl.style.display = 'none';
             if (errorEl) errorEl.classList.remove('show');
             if (resultEl) resultEl.classList.add('show');
             
             this.updateSynonymDisplay();
+            ContentTemplates.updatePositionIndicator();
+            
+            // 如果只有一个同义词，添加特殊提示
+            if (result.synonyms.length === 1) {
+                const simplifyBtn = state.floatingWidget.querySelector('.wm-simplify-btn');
+                if (simplifyBtn) {
+                    simplifyBtn.style.display = 'none';
+                }
+            }
         } else {
-            console.log('Word Munch: 没有找到同义词');
+            console.log('Word Munch: No synonyms found');
             
             if (loadingEl) loadingEl.style.display = 'none';
             if (resultEl) resultEl.classList.remove('show');
             if (errorEl) {
                 errorEl.classList.add('show');
-                errorEl.textContent = '暂无简化结果';
+                errorEl.textContent = 'No simplification results';
             }
         }
     }
 
     static updateSynonymDisplay() {
+        console.log('Word Munch: updateSynonymDisplay called');
+        
         if (!state.floatingWidget || !state.currentResult || !state.currentResult.synonyms) {
-            console.log('Word Munch: 无法更新同义词显示 - 缺少必要数据');
+            console.log('Word Munch: Cannot update synonym display - missing data');
             return;
         }
         
@@ -1169,35 +1239,78 @@ class ResultDisplayer {
         
         if (synonymEl && state.currentResult.synonyms.length > state.currentSynonymIndex) {
             const synonym = state.currentResult.synonyms[state.currentSynonymIndex];
-            const synonymText = typeof synonym === 'string' ? synonym : synonym.word || '简化完成';
+            const synonymText = typeof synonym === 'string' ? synonym : synonym.word || 'Simplification complete';
             
             synonymEl.textContent = synonymText;
             
             if (simplifyBtn) {
-                if (state.currentSynonymIndex < state.currentResult.synonyms.length - 1) {
+                const current = state.currentSynonymIndex + 1;
+                const total = state.currentResult.synonyms.length;
+                
+                // 移除之前的样式类
+                simplifyBtn.classList.remove('wm-btn-loop', 'wm-btn-next');
+                
+                if (current < total) {
+                    // 不是最后一个，显示正常的"下一个"
                     simplifyBtn.disabled = false;
-                    simplifyBtn.title = `换一个 (${state.currentSynonymIndex + 1}/${state.currentResult.synonyms.length})`;
+                    simplifyBtn.innerHTML = '▶';
+                    simplifyBtn.title = `Next (${current}/${total})`;
+                    simplifyBtn.classList.add('wm-btn-next');
                 } else {
-                    simplifyBtn.disabled = true;
-                    simplifyBtn.title = '已是最后一个';
+                    // 最后一个，显示循环提示
+                    simplifyBtn.disabled = false;
+                    simplifyBtn.innerHTML = '↻';
+                    simplifyBtn.title = `Back to first (${current}/${total})`;
+                    simplifyBtn.classList.add('wm-btn-loop');
                 }
             }
         }
+        
+        // 更新位置指示器
+        ContentTemplates.updatePositionIndicator();
     }
 
     static showNextSynonym() {
-        console.log('Word Munch: 切换到下一个同义词');
+        console.log('Word Munch: showNextSynonym called');
         
         if (!state.currentResult || !state.currentResult.synonyms) {
-            console.log('Word Munch: 没有可用的同义词');
+            console.log('Word Munch: No available synonyms');
+            if (state.currentSelection && state.currentSelection.text) {
+                console.log('Word Munch: Retry API request for:', state.currentSelection.text);
+                APIManager.startSimplification(state.currentSelection.text, 'word');
+            }
             return;
         }
         
-        if (state.currentSynonymIndex < state.currentResult.synonyms.length - 1) {
+        const total = state.currentResult.synonyms.length;
+        
+        if (state.currentSynonymIndex < total - 1) {
             state.currentSynonymIndex++;
-            this.updateSynonymDisplay();
+            console.log('Word Munch: Moving to synonym index:', state.currentSynonymIndex);
         } else {
-            console.log('Word Munch: 已是最后一个同义词');
+            // 循环回到第一个
+            state.currentSynonymIndex = 0;
+            console.log('Word Munch: Looping back to first synonym');
+            
+            // 添加循环动画效果
+            this.showLoopAnimation();
+        }
+        
+        this.updateSynonymDisplay();
+        ContentTemplates.updatePositionIndicator();
+    }
+
+    // Add loop animation effect
+    static showLoopAnimation() {
+        const synonymEl = state.floatingWidget?.querySelector('.wm-synonym');
+        if (synonymEl) {
+            synonymEl.style.transform = 'scale(0.95)';
+            synonymEl.style.opacity = '0.7';
+            
+            setTimeout(() => {
+                synonymEl.style.transform = 'scale(1)';
+                synonymEl.style.opacity = '1';
+            }, 150);
         }
     }
 
@@ -1218,8 +1331,8 @@ class ResultDisplayer {
                     }, 1000);
                 }
             }).catch(err => {
-                console.error('复制失败:', err);
-                this.showSimpleToast('复制失败', 'error');
+                console.error('Copy failed:', err);
+                this.showSimpleToast('Copy failed', 'error');
             });
         }
     }
@@ -1237,9 +1350,9 @@ class ResultDisplayer {
             errorEl.classList.add('show');
             
             errorEl.innerHTML = `
-                <div style="margin-bottom: 8px;">${error || '简化失败'}</div>
+                <div style="margin-bottom: 8px;">${error || 'Simplification failed'}</div>
                 <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
-                    重试
+                    Retry
                 </button>
             `;
             
@@ -1256,7 +1369,7 @@ class ResultDisplayer {
     static retrySimplification() {
         if (!state.currentSelection) return;
         
-        console.log('Word Munch: 重试简化:', state.currentSelection.text);
+        console.log('Word Munch: Retry simplification:', state.currentSelection.text);
         
         const errorEl = state.floatingWidget?.querySelector('.wm-error');
         const loadingEl = state.floatingWidget?.querySelector('.wm-loading');
@@ -1297,310 +1410,59 @@ class ResultDisplayer {
             }, 300);
         }, 3000);
     }
+
+    static initializeStyles() {
+        // Add any additional styles you want to apply when styles are initialized
+        console.log('Word Munch: Styles initialized');
+    }
 }
 
-// === 理解分析器 ===
-// === 优化后的理解分析器 - 大幅减少AI调用成本 ===
+// === Minimal Concept Analyzer ===
 class ConceptAnalyzer {
     static fillContextInformation(selectedText) {
         // 重要：在理解分析前检查扩展状态
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，取消理解分析');
+            console.log('Word Munch: Extension disabled, cancel concept analysis');
             WidgetManager.closeFloatingWidget();
             return;
         }
         
         try {
-            console.log('Word Munch: 开始提取上下文信息');
+            console.log('Word Munch: Start filling context information');
             
-            const contextStrategy = this.determineContextStrategy(selectedText);
-            console.log('Word Munch: Context策略:', contextStrategy);
+            // Simple cost estimation
+            const wordCount = selectedText.split(/\s+/).length;
+            const estimatedCost = Math.max(0.0002, wordCount * 0.00003);
             
-            let contextInfo;
-            
-            switch (contextStrategy.type) {
-                case 'full_context':
-                    contextInfo = this.extractFullContext(selectedText);
-                    break;
-                case 'minimal_context':
-                    contextInfo = this.extractMinimalContext(selectedText);
-                    break;
-                case 'no_context':
-                    contextInfo = null;
-                    break;
-                case 'user_only': // 新增：仅用户理解，不使用AI分析上下文
-                    contextInfo = 'user_only';
-                    break;
-                default:
-                    contextInfo = null;
-            }
-            
-            const costEstimate = this.estimateContextCost(contextStrategy, contextInfo);
-            console.log('Word Munch: 成本估算:', costEstimate);
-            
-            const contextElement = state.floatingWidget?.querySelector('.concept-context-content');
-            if (contextElement) {
-                if (contextInfo === null) {
-                    contextElement.innerHTML = `
-                        <div style="color: #16a34a; font-style: italic;">
-                            ✅ 段落完整，无需上下文
-                        </div>
-                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
-                            成本：免费
-                        </div>
-                    `;
-                } else if (contextInfo === 'user_only') {
-                    contextElement.innerHTML = `
-                        <div style="color: #8b5cf6; font-style: italic;">
-                            💭 仅基于您的理解分析
-                        </div>
-                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
-                            成本：低（约${costEstimate.estimatedCost.toFixed(4)}¢）
-                        </div>
-                    `;
-                } else if (contextInfo === 'auto_extract') {
-                    contextElement.innerHTML = `
-                        <div style="color: #f59e0b; font-weight: 500;">
-                            🤖 AI智能分析上下文
-                        </div>
-                        <div style="font-size: 12px; color: #dc2626; margin-top: 4px;">
-                            ⚠️ 成本：高（约${costEstimate.estimatedCost.toFixed(4)}¢）
-                        </div>
-                        <button class="switch-to-simple-btn" style="
-                            margin-top: 8px; 
-                            padding: 4px 8px; 
-                            background: #16a34a; 
-                            color: white; 
-                            border: none; 
-                            border-radius: 4px; 
-                            font-size: 11px;
-                            cursor: pointer;
-                        ">
-                            💰 切换到省钱模式
-                        </button>
-                    `;
-                } else {
-                    const displayText = contextInfo.length > 100 
-                        ? contextInfo.substring(0, 97) + '...' 
-                        : contextInfo;
-                    contextElement.innerHTML = `
-                        <div style="color: #374151;">${displayText}</div>
-                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
-                            成本：中等（约${costEstimate.estimatedCost.toFixed(4)}¢）
-                        </div>
-                    `;
-                }
+            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal');
+            if (costElement) {
+                costElement.textContent = `Cost: ~$${estimatedCost.toFixed(4)}`;
                 
-                // 绑定切换按钮事件
-                const switchBtn = contextElement.querySelector('.switch-to-simple-btn');
-                if (switchBtn) {
-                    switchBtn.addEventListener('click', () => {
-                        this.switchToSimpleMode(selectedText);
-                    });
+                // Color code by cost
+                if (estimatedCost > 0.001) {
+                    costElement.style.color = '#dc2626'; // Red for high cost
+                } else if (estimatedCost > 0.0005) {
+                    costElement.style.color = '#f59e0b'; // Orange for medium cost
+                } else {
+                    costElement.style.color = '#16a34a'; // Green for low cost
                 }
             }
             
-            state.currentSelection.contextInfo = contextInfo;
-            state.currentSelection.contextStrategy = contextStrategy;
-            state.currentSelection.costEstimate = costEstimate;
+            // Store simplified context strategy
+            state.currentSelection.contextStrategy = { type: 'user_only' };
+            state.currentSelection.costEstimate = { estimatedCost };
             
         } catch (error) {
-            console.error('Word Munch: 填充上下文信息失败:', error);
-            const contextElement = state.floatingWidget?.querySelector('.concept-context-content');
-            if (contextElement) {
-                contextElement.textContent = '上下文提取失败';
+            console.error('Word Munch: Failed to fill context information:', error);
+            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal');
+            if (costElement) {
+                costElement.textContent = 'Cost estimation failed';
             }
         }
-    }
-
-    static switchToSimpleMode(selectedText) {
-        console.log('Word Munch: 切换到省钱模式');
-        
-        // 强制使用 user_only 模式
-        const contextStrategy = {
-            type: 'user_only',
-            reason: '用户选择省钱模式',
-            useContext: false,
-            autoExtract: false,
-            maxCost: 'very_low'
-        };
-        
-        state.currentSelection.contextStrategy = contextStrategy;
-        state.currentSelection.contextInfo = 'user_only';
-        state.currentSelection.costEstimate = this.estimateContextCost(contextStrategy, 'user_only');
-        
-        // 更新UI显示
-        const contextElement = state.floatingWidget?.querySelector('.concept-context-content');
-        if (contextElement) {
-            contextElement.innerHTML = `
-                <div style="color: #16a34a; font-style: italic;">
-                    💰 省钱模式：仅基于您的理解
-                </div>
-                <div style="font-size: 12px; color: #16a34a; margin-top: 4px;">
-                    成本：低（约${state.currentSelection.costEstimate.estimatedCost.toFixed(4)}¢）
-                </div>
-            `;
-        }
-    }
-
-    static determineContextStrategy(selectedText) {
-        const wordCount = selectedText.split(/\s+/).length;
-        
-        // 大幅优化：默认都使用更省钱的策略
-        if (wordCount <= 5) {
-            return {
-                type: 'user_only', // 改为仅用户理解，不分析上下文
-                reason: '单词无需上下文分析',
-                useContext: false,
-                autoExtract: false,
-                maxCost: 'very_low'
-            };
-        }
-        
-        if (wordCount >= 6 && wordCount <= 15) {
-            return {
-                type: 'user_only', // 改为仅用户理解
-                reason: '短语基于用户理解即可',
-                useContext: false,
-                autoExtract: false,
-                maxCost: 'very_low'
-            };
-        }
-        
-        if (wordCount >= 16 && wordCount <= 30) {
-            return {
-                type: 'user_only', // 改为仅用户理解
-                reason: '短句基于用户理解即可',
-                useContext: false,
-                autoExtract: false,
-                maxCost: 'low'
-            };
-        }
-        
-        if (wordCount >= 31 && wordCount <= 50) {
-            return {
-                type: 'minimal_context', // 中等长度才考虑最小上下文
-                reason: '中等段落需要基础上下文',
-                useContext: true,
-                autoExtract: false,
-                maxCost: 'medium'
-            };
-        }
-        
-        if (wordCount > 50) {
-            return {
-                type: 'no_context', // 长段落无需上下文
-                reason: '长段落无需额外上下文',
-                useContext: false,
-                autoExtract: false,
-                maxCost: 'none'
-            };
-        }
-        
-        return {
-            type: 'user_only', // 默认使用最省钱的模式
-            reason: '默认省钱模式',
-            useContext: false,
-            autoExtract: false,
-            maxCost: 'very_low'
-        };
-    }
-
-    static extractFullContext(selectedText) {
-        // 实现简单的上下文提取，避免复杂计算
-        if (!state.currentSelection || !state.currentSelection.range) {
-            return null;
-        }
-        
-        try {
-            const range = state.currentSelection.range;
-            const container = range.commonAncestorContainer;
-            
-            let textContent = '';
-            if (container.nodeType === Node.TEXT_NODE) {
-                textContent = container.parentElement ? container.parentElement.textContent : '';
-            } else {
-                textContent = container.textContent || '';
-            }
-            
-            const selectedIndex = textContent.indexOf(selectedText);
-            if (selectedIndex === -1) return null;
-            
-            // 限制上下文长度，控制成本
-            const contextLength = 80; // 大幅减少从之前的100-200
-            const beforeContext = textContent.substring(Math.max(0, selectedIndex - contextLength), selectedIndex);
-            const afterContext = textContent.substring(selectedIndex + selectedText.length, selectedIndex + selectedText.length + contextLength);
-            
-            const fullContext = (beforeContext + selectedText + afterContext).trim();
-            
-            // 如果上下文和原文差不多，就不用上下文
-            if (fullContext.length - selectedText.length < 50) {
-                return null;
-            }
-            
-            return fullContext;
-        } catch (error) {
-            console.error('Word Munch: 提取上下文失败:', error);
-            return null;
-        }
-    }
-
-    static extractMinimalContext(selectedText) {
-        const fullContext = this.extractFullContext(selectedText);
-        if (!fullContext) return null;
-        
-        // 进一步压缩上下文，只保留最关键的部分
-        const maxContextLength = 120; // 进一步减少
-        if (fullContext.length <= maxContextLength) {
-            return fullContext;
-        }
-        
-        // 智能截取：保留句子完整性
-        const shortened = fullContext.substring(0, maxContextLength);
-        const lastSentenceEnd = Math.max(
-            shortened.lastIndexOf('。'),
-            shortened.lastIndexOf('.'),
-            shortened.lastIndexOf('!'),
-            shortened.lastIndexOf('?')
-        );
-        
-        if (lastSentenceEnd > maxContextLength / 2) {
-            return shortened.substring(0, lastSentenceEnd + 1);
-        }
-        
-        return shortened + '...';
-    }
-
-    static estimateContextCost(contextStrategy, contextText) {
-        let estimatedTokens = 30; // 减少基础prompt成本
-        estimatedTokens += 15; // 减少用户理解成本
-        estimatedTokens += Math.ceil((state.currentSelection?.text?.length || 0) / 4);
-        
-        if (contextText && contextText !== 'user_only') {
-            estimatedTokens += Math.ceil(contextText.length / 4);
-        }
-        
-        // 大幅减少AI分析成本
-        if (contextStrategy.autoExtract) {
-            estimatedTokens += 50; // 从30增加到50，但实际很少使用
-        }
-        
-        // 更精确的成本计算
-        const costPerToken = 0.0000025; // 更精确的每token成本
-        
-        return {
-            estimatedTokens,
-            estimatedCost: estimatedTokens * costPerToken,
-            level: estimatedTokens < 50 ? 'very_low' : 
-                   estimatedTokens < 100 ? 'low' : 
-                   estimatedTokens < 200 ? 'medium' : 'high'
-        };
     }
 
     static async startConceptAnalysis(originalText) {
-        // 重要：在开始分析前检查扩展状态
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，取消理解分析');
             WidgetManager.closeFloatingWidget();
             return;
         }
@@ -1608,66 +1470,29 @@ class ConceptAnalyzer {
         const widget = state.floatingWidget;
         if (!widget) return;
         
-        const understandingInput = widget.querySelector('.concept-understanding-input');
-        const analyzeBtn = widget.querySelector('.concept-analyze-btn');
-        const loadingElement = widget.querySelector('.concept-loading');
-        const resultsElement = widget.querySelector('.concept-results');
-        const errorElement = widget.querySelector('.concept-error');
+        const understandingInput = widget.querySelector('.concept-understanding-input-minimal');
+        const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
+        const loadingElement = widget.querySelector('.concept-loading-minimal');
+        const resultsElement = widget.querySelector('.concept-results-minimal');
+        const errorElement = widget.querySelector('.concept-error-minimal');
         
         const userUnderstanding = understandingInput.value.trim();
         
         if (!userUnderstanding) {
-            this.showConceptError('请输入您的理解');
+            this.showConceptError('Please enter your understanding');
             return;
-        }
-        
-        // 成本确认机制
-        const costEstimate = state.currentSelection.costEstimate || { estimatedCost: 0.001 };
-        const costInCents = costEstimate.estimatedCost * 100;
-        
-        if (costInCents > 0.5) { // 超过0.5分钱就提醒
-            const confirmMessage = `本次分析预计花费约 ${costInCents.toFixed(2)} 分钱，是否继续？\n\n💡 提示：您可以点击"切换到省钱模式"来降低成本。`;
-            if (!confirm(confirmMessage)) {
-                return;
-            }
         }
         
         try {
             analyzeBtn.disabled = true;
-            loadingElement.style.display = 'block';
+            loadingElement.style.display = 'flex';
             resultsElement.style.display = 'none';
             errorElement.style.display = 'none';
             
-            const contextStrategy = state.currentSelection.contextStrategy || { 
-                type: 'user_only', 
-                useContext: false, 
-                autoExtract: false 
-            };
-            
-            let finalContext = null;
-            let autoExtractContext = false;
-            
-            switch (contextStrategy.type) {
-                case 'full_context':
-                case 'minimal_context':
-                    finalContext = state.currentSelection.contextInfo;
-                    autoExtractContext = false;
-                    break;
-                case 'no_context':
-                case 'user_only': // 新增
-                    finalContext = null;
-                    autoExtractContext = false;
-                    break;
-                case 'auto_extract':
-                    finalContext = null;
-                    autoExtractContext = true;
-                    break;
-            }
-            
-            this.sendConceptAnalysisMessage(originalText, userUnderstanding, finalContext, autoExtractContext);
+            this.sendConceptAnalysisMessage(originalText, userUnderstanding, null, false);
             
         } catch (error) {
-            console.error('Word Munch: 理解分析失败:', error);
+            console.error('Word Munch: Analysis failed:', error);
             this.showConceptError(error.message);
             
             analyzeBtn.disabled = false;
@@ -1678,16 +1503,13 @@ class ConceptAnalyzer {
     static sendConceptAnalysisMessage(originalText, userUnderstanding, context, autoExtractContext) {
         const messageId = Math.random().toString(36).substr(2, 9);
         
-        // 添加成本控制标记
-        const costLevel = state.currentSelection.costEstimate?.level || 'low';
-        
         const message = {
             type: 'CONCEPT_ANALYSIS',
             original_text: originalText,
             user_understanding: userUnderstanding,
             context: context,
             auto_extract_context: autoExtractContext,
-            cost_level: costLevel, // 传递成本级别给background
+            cost_level: 'low',
             url: window.location.href,
             title: document.title,
             messageId: messageId,
@@ -1695,43 +1517,23 @@ class ConceptAnalyzer {
             cache_key: this.generateConceptCacheKey(originalText, userUnderstanding, context)
         };
         
-        console.log('Word Munch: 发送理解分析消息到 background:', messageId, '成本级别:', costLevel);
+        console.log('Word Munch: Sending analysis message:', messageId);
         
         try {
             chrome.runtime.sendMessage(message, (response) => {
                 if (chrome.runtime.lastError) {
-                    if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
-                        console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
-                        this.showConceptError('扩展需要刷新，请刷新页面后重试');
-                        return;
-                    }
-                    console.error('Word Munch: 理解分析消息发送失败:', chrome.runtime.lastError.message);
-                    this.showConceptError('连接扩展失败，请重试');
+                    this.showConceptError('Connection failed, please retry');
                     return;
                 }
                 
-                if (response) {
-                    console.log('Word Munch: 收到 background 响应:', response);
-                    
-                    if (response.received) {
-                        console.log('Word Munch: 理解分析消息已被 background 接收');
-                    } else if (response.error) {
-                        console.error('Word Munch: Background 处理错误:', response.error);
-                        this.showConceptError(response.error);
-                    }
-                } else {
-                    console.warn('Word Munch: 未收到 background 响应');
-                    this.showConceptError('未收到响应，请重试');
+                if (response?.received) {
+                    console.log('Word Munch: Message received by background');
+                } else if (response?.error) {
+                    this.showConceptError(response.error);
                 }
             });
         } catch (error) {
-            if (error.message && error.message.includes('Extension context invalidated')) {
-                console.log('Word Munch: 扩展上下文已失效，建议刷新页面');
-                this.showConceptError('扩展需要刷新，请刷新页面后重试');
-                return;
-            }
-            console.error('Word Munch: 发送理解分析消息异常:', error);
-            this.showConceptError('发送请求失败，请重试');
+            this.showConceptError('Failed to send request');
         }
     }
 
@@ -1752,13 +1554,12 @@ class ConceptAnalyzer {
         const widget = state.floatingWidget;
         if (!widget) return;
         
-        const errorElement = widget.querySelector('.concept-error');
+        const errorElement = widget.querySelector('.concept-error-minimal');
+        const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
+        const loadingElement = widget.querySelector('.concept-loading-minimal');
+        
         if (errorElement) {
-            errorElement.innerHTML = `
-                <div class="concept-error-content">
-                    ⚠️ ${message}
-                </div>
-            `;
+            errorElement.innerHTML = `⚠️ ${message}`;
             errorElement.style.display = 'block';
             
             setTimeout(() => {
@@ -1768,118 +1569,70 @@ class ConceptAnalyzer {
             }, 3000);
         }
         
-        // 重新启用按钮
-        const analyzeBtn = widget.querySelector('.concept-analyze-btn');
-        if (analyzeBtn) {
-            analyzeBtn.disabled = false;
-        }
-        
-        const loadingElement = widget.querySelector('.concept-loading');
-        if (loadingElement) {
-            loadingElement.style.display = 'none';
-        }
+        if (analyzeBtn) analyzeBtn.disabled = false;
+        if (loadingElement) loadingElement.style.display = 'none';
     }
 
     static displayConceptResults(analysis) {
         const widget = state.floatingWidget;
         if (!widget) return;
         
-        const resultsElement = widget.querySelector('.concept-results');
+        const resultsElement = widget.querySelector('.concept-results-minimal');
+        const loadingElement = widget.querySelector('.concept-loading-minimal');
+        
         if (!resultsElement) return;
         
         const scorePercentage = Math.round(analysis.overall_similarity * 100);
-        const stats = analysis.analysis_stats;
-        
-        // 显示实际花费
         const actualCost = analysis.actual_cost || state.currentSelection.costEstimate?.estimatedCost || 0;
-        const actualCostCents = actualCost * 100;
         
+        // Minimal results display
         const resultsHTML = `
-            <div class="concept-cost-info" style="
-                background: #f0fdf4; 
-                border: 1px solid #bbf7d0; 
-                border-radius: 6px; 
-                padding: 8px; 
-                margin-bottom: 12px;
-                font-size: 12px;
-            ">
-                <div style="color: #16a34a; font-weight: 500;">
-                    💰 本次分析花费：${actualCostCents.toFixed(3)} 分钱
+            <div class="concept-score-minimal">
+                <div class="score-circle">
+                    <span class="score-number">${scorePercentage}%</span>
                 </div>
-                <div style="color: #6b7280;">
-                    Token消耗：${analysis.token_usage || '未知'}
-                </div>
+                <div class="score-label">Understanding Match</div>
             </div>
             
-            <div class="concept-score-section">
-                <div class="concept-score-card">
-                    <div class="concept-score-value">${scorePercentage}%</div>
-                    <div class="concept-score-label">理解相似度</div>
-                </div>
-                <div class="concept-stats">
-                    <span class="concept-stat">📝 ${stats.total_segments}段</span>
-                    <span class="concept-stat">✅ ${stats.high_similarity_count}优秀</span>
-                    <span class="concept-stat">⚠️ ${stats.low_similarity_count}待提升</span>
-                </div>
+            <div class="concept-suggestions-minimal">
+                <div class="suggestion-title">💡 Key Suggestions</div>
+                ${analysis.suggestions.slice(0, 2).map(suggestion => 
+                    `<div class="suggestion-item">• ${suggestion}</div>`
+                ).join('')}
             </div>
             
-            <div class="concept-suggestions">
-                <div class="concept-suggestions-title">💡 改进建议</div>
-                <ul class="concept-suggestions-list">
-                    ${analysis.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
-                </ul>
+            <div class="concept-cost-info-minimal">
+                Cost: $${(actualCost * 100).toFixed(3)}¢
             </div>
-            
-            ${analysis.detailed_feedback ? this.renderConceptDetailedFeedback(analysis.detailed_feedback) : ''}
         `;
         
         resultsElement.innerHTML = resultsHTML;
         resultsElement.style.display = 'block';
+        loadingElement.style.display = 'none';
         
-        HighlightManager.highlightOriginalText(analysis.segments);
-        
-        if (widget) {
-            widget.style.maxHeight = '80vh';
-            widget.style.overflowY = 'auto';
+        // Simplified highlighting
+        if (analysis.segments) {
+            HighlightManager.highlightOriginalText(analysis.segments);
         }
-    }
-
-    static renderConceptDetailedFeedback(feedback) {
-        return `
-            <div class="concept-detailed-feedback">
-                <div class="concept-feedback-title">🎯 详细分析</div>
-                
-                <div class="concept-feedback-item">
-                    <strong>🎓 认知层次:</strong> ${feedback.cognitive_level}
-                </div>
-                
-                <div class="concept-feedback-item">
-                    <strong>🚀 建议操作:</strong>
-                    <ul>
-                        ${feedback.actionable_suggestions.slice(0, 2).map(suggestion => `<li>${suggestion}</li>`).join('')}
-                    </ul>
-                </div>
-            </div>
-        `;
     }
 }
 
 // === 高亮管理器 ===
 class HighlightManager {
     static highlightOriginalText(segments) {
-        console.log('Word Munch: 开始在原文上显示滚动跟随高亮');
+        console.log('Word Munch: Start displaying scroll-following highlights on original text');
         
         this.clearOriginalHighlights();
         
         if (!state.currentSelection || !state.currentSelection.range) {
-            console.log('Word Munch: 没有当前选择，无法高亮');
+            console.log('Word Munch: No current selection, cannot highlight');
             return;
         }
         
         // 检查是否在阅读模式中
         const isInReaderMode = document.getElementById('word-munch-reader-container');
         if (isInReaderMode) {
-            console.log('Word Munch: 在阅读模式中，使用特殊高亮逻辑');
+            console.log('Word Munch: In reader mode, use special highlight logic');
             this.highlightInReaderMode(segments);
             return;
         }
@@ -1940,22 +1693,22 @@ class HighlightManager {
                     currentOffset = segmentStart + segment.text.length;
                     
                 } catch (error) {
-                    console.warn('Word Munch: 创建 segment 高亮失败:', error);
+                    console.warn('Word Munch: Failed to create segment highlight:', error);
                 }
             });
             
-            console.log('Word Munch: 高亮创建完成，共', state.highlightRanges.length, '个高亮元素');
+            console.log('Word Munch: Highlight creation complete,', state.highlightRanges.length, 'highlight elements');
             
             this.startScrollTracking();
             
         } catch (error) {
-            console.error('Word Munch: 原文高亮失败:', error);
+            console.error('Word Munch: Original text highlighting failed:', error);
         }
     }
 
     // 在阅读模式中的高亮处理
     static highlightInReaderMode(segments) {
-        console.log('Word Munch: 在阅读模式中创建高亮');
+        console.log('Word Munch: Create highlights in reader mode');
         
         try {
             const originalRange = state.currentSelection.range;
@@ -2020,16 +1773,16 @@ class HighlightManager {
                     currentOffset = segmentStart + segment.text.length;
                     
                 } catch (error) {
-                    console.warn('Word Munch: 创建阅读模式 segment 高亮失败:', error);
+                    console.warn('Word Munch: Failed to create reader mode segment highlight:', error);
                 }
             });
             
-            console.log('Word Munch: 阅读模式高亮创建完成，共', state.highlightRanges.length, '个高亮元素');
+            console.log('Word Munch: Reader mode highlight creation complete,', state.highlightRanges.length, 'highlight elements');
             
             this.startScrollTracking();
             
         } catch (error) {
-            console.error('Word Munch: 阅读模式高亮失败:', error);
+            console.error('Word Munch: Reader mode highlighting failed:', error);
         }
     }
 
@@ -2037,7 +1790,7 @@ class HighlightManager {
         if (state.isScrollTracking) return;
         
         state.isScrollTracking = true;
-        console.log('Word Munch: 开始零延迟滚动跟踪');
+        console.log('Word Munch: Start zero-delay scroll tracking');
         
         function instantUpdate() {
             this.updateAllHighlightPositions();
@@ -2067,7 +1820,7 @@ class HighlightManager {
         if (!state.isScrollTracking) return;
         
         state.isScrollTracking = false;
-        console.log('Word Munch: 停止滚动跟踪');
+        console.log('Word Munch: Stop scroll tracking');
         
         if (window.highlightScrollHandler) {
             window.removeEventListener('scroll', window.highlightScrollHandler);
@@ -2107,7 +1860,7 @@ class HighlightManager {
                 }
                 
             } catch (error) {
-                console.warn('Word Munch: 更新高亮位置失败:', error);
+                console.warn('Word Munch: Failed to update highlight position:', error);
                 if (highlightInfo.element) {
                     highlightInfo.element.style.opacity = '0';
                 }
@@ -2116,7 +1869,7 @@ class HighlightManager {
     }
 
     static clearOriginalHighlights() {
-        console.log('Word Munch: 清理原文高亮');
+        console.log('Word Munch: Clear original text highlights');
         
         this.stopScrollTracking();
         
@@ -2128,17 +1881,17 @@ class HighlightManager {
         state.originalHighlightElements = [];
         state.highlightRanges = [];
         
-        console.log('Word Munch: 原文高亮已清理');
+        console.log('Word Munch: Original text highlights cleared');
     }
 }
 
 // === 消息处理器 ===
 class MessageHandlers {
     static handleWordSimplified(word, result) {
-        console.log('Word Munch: 词汇简化完成:', word, result);
+        console.log('Word Munch: Word simplification complete:', word, result);
         
         if (!state.floatingWidget || !state.currentSelection || state.currentSelection.text !== word) {
-            console.log('Word Munch: 结果不匹配当前状态，忽略');
+            console.log('Word Munch: Result does not match current state, ignore');
             return;
         }
         
@@ -2156,27 +1909,27 @@ class MessageHandlers {
     }
 
     static handleConceptAnalyzed(original_text, result) {
-        console.log('Word Munch: 理解分析完成:', original_text, result);
+        console.log('Word Munch: Concept analysis complete:', original_text, result);
         
         if (!state.floatingWidget || !state.currentSelection || !state.isConceptMode || state.currentSelection.text !== original_text) {
-            console.log('Word Munch: 理解分析结果不匹配当前状态，忽略');
+            console.log('Word Munch: Concept analysis result does not match current state, ignore');
             return;
         }
         
         state.currentConceptAnalysis = result;
         ConceptAnalyzer.displayConceptResults(result);
         
-        const loadingElement = state.floatingWidget.querySelector('.concept-loading');
+        const loadingElement = state.floatingWidget.querySelector('.concept-loading-minimal');
         if (loadingElement) {
             loadingElement.style.display = 'none';
         }
     }
 
     static handleSimplifyError(word, error) {
-        console.error('Word Munch: 简化失败:', word, error);
+        console.error('Word Munch: Simplification failed:', word, error);
         
         if (!state.floatingWidget || !state.currentSelection || state.currentSelection.text !== word) {
-            console.log('Word Munch: 错误不匹配当前状态，忽略');
+            console.log('Word Munch: Error does not match current state, ignore');
             return;
         }
         
@@ -2190,39 +1943,39 @@ class MessageHandlers {
     }
 
     static handleConceptAnalysisError(text, error) {
-        console.error('Word Munch: 理解分析失败:', text, error);
+        console.error('Word Munch: Concept analysis failed:', text, error);
         
         if (!state.floatingWidget || !state.currentSelection || !state.isConceptMode || state.currentSelection.text !== text) {
-            console.log('Word Munch: 理解分析错误不匹配当前状态，忽略');
+            console.log('Word Munch: Concept analysis error does not match current state, ignore');
             return;
         }
         
         ConceptAnalyzer.showConceptError(error);
         
-        const loadingElement = state.floatingWidget.querySelector('.concept-loading');
+        const loadingElement = state.floatingWidget.querySelector('.concept-loading-minimal');
         if (loadingElement) {
             loadingElement.style.display = 'none';
         }
         
-        const analyzeBtn = state.floatingWidget.querySelector('.concept-analyze-btn');
+        const analyzeBtn = state.floatingWidget.querySelector('.concept-analyze-btn-minimal');
         if (analyzeBtn) {
             analyzeBtn.disabled = false;
         }
     }
 
     static handleSettingsUpdated(settings) {
-        console.log('Word Munch: 设置已更新:', settings);
+        console.log('Word Munch: Settings updated:', settings);
         
         // 更新本地设置状态
         state.extensionSettings = { ...state.extensionSettings, ...settings };
         
         if (settings.hasOwnProperty('conceptMuncherEnabled')) {
-            console.log('Word Munch: 理解分析功能状态:', settings.conceptMuncherEnabled);
+            console.log('Word Munch: Concept analysis feature status:', settings.conceptMuncherEnabled);
         }
         
         // 如果扩展被禁用，立即关闭所有窗口和清理状态
         if (!state.extensionSettings.extensionEnabled) {
-            console.log('Word Munch: 扩展已禁用，立即关闭所有窗口和清理状态');
+            console.log('Word Munch: Extension disabled, immediately close all windows and clear state');
             WidgetManager.closeFloatingWidget();
             HighlightManager.clearOriginalHighlights();
             
@@ -2232,7 +1985,7 @@ class MessageHandlers {
             // 重置所有状态
             state.reset();
             
-            console.log('Word Munch: 扩展禁用后清理完成');
+            console.log('Word Munch: Cleanup complete after extension disabled');
         }
     }
 }
@@ -2242,7 +1995,7 @@ const eventManager = new EventManager();
 
 // 页面加载完成后的初始化
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('Word Munch: Content script 已加载');
+    console.log('Word Munch: Content script loaded');
     
     // 首先加载设置
     await state.loadSettings();
@@ -2252,10 +2005,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         type: 'CONTENT_SCRIPT_READY',
         url: window.location.href
     });
+
+    // 在内容脚本主入口处添加：
+    ResultDisplayer.initializeStyles();
 });
 
 if (document.readyState !== 'loading') {
-    console.log('Word Munch: Content script 已加载（页面已完成）');
+    console.log('Word Munch: Content script loaded (page already complete)');
     
     // 立即加载设置
     state.loadSettings().then(() => {
@@ -2270,25 +2026,25 @@ if (document.readyState !== 'loading') {
 
 // 错误处理
 window.addEventListener('error', function(event) {
-    console.error('Word Munch: Content script 错误:', event.error);
+    console.error('Word Munch: Content script error:', event.error);
 });
 
 // 清理资源
 window.addEventListener('beforeunload', function() {
-    console.log('Word Munch: 页面卸载，清理高亮资源');
+    console.log('Word Munch: Page unload, clear highlight resources');
     HighlightManager.stopScrollTracking();
     HighlightManager.clearOriginalHighlights();
 });
 
-console.log('Word Munch: Content script 初始化完成');
+console.log('Word Munch: Content script initialization complete');
 
 // === 调试函数 ===
 window.debugHighlights = function() {
-    console.log('Word Munch: 高亮调试信息:');
-    console.log('- 滚动跟踪状态:', state.isScrollTracking);
-    console.log('- 高亮数量:', state.highlightRanges.length);
-    console.log('- 高亮元素数量:', state.originalHighlightElements.length);
-    console.log('- 高亮数据:', state.highlightRanges);
+    console.log('Word Munch: Highlight debug info:');
+    console.log('- Scroll tracking status:', state.isScrollTracking);
+    console.log('- Highlight count:', state.highlightRanges.length);
+    console.log('- Highlight element count:', state.originalHighlightElements.length);
+    console.log('- Highlight data:', state.highlightRanges);
     
     HighlightManager.updateAllHighlightPositions();
     
@@ -2323,9 +2079,9 @@ window.getExtensionStatus = function() {
 
 // 新增：手动重新加载设置的函数
 window.reloadExtensionSettings = async function() {
-    console.log('Word Munch: 手动重新加载设置');
+    console.log('Word Munch: Manually reload settings');
     await state.loadSettings();
-    console.log('Word Munch: 设置重新加载完成:', state.extensionSettings);
+    console.log('Word Munch: Settings reload complete:', state.extensionSettings);
     return state.extensionSettings;
 };
 
@@ -2336,6 +2092,7 @@ class SimpleReaderMode {
         this.originalScrollPosition = 0;
         this.isChunkedMode = false;
         this.isColorMode = false;
+        this.isFocusMode = false;
         this.focusMode = 'balanced';
         this.chunks = [];
         this.currentChunkIndex = -1;
@@ -2349,7 +2106,7 @@ class SimpleReaderMode {
         if (typeof chrome !== 'undefined' && chrome.storage) {
             chrome.storage.sync.get(['focusMode'], (result) => {
                 this.focusMode = result.focusMode || 'balanced';
-                console.log('Word Munch: 加载专注模式设置:', this.focusMode);
+                console.log('Word Munch: Load focus mode settings:', this.focusMode);
             });
         }
     }
@@ -2357,19 +2114,19 @@ class SimpleReaderMode {
     setupReaderMessageListener() {
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.type === 'TOGGLE_READER_MODE') {
-                console.log('Word Munch: 收到阅读模式切换消息');
+                console.log('Word Munch: Received reader mode toggle message');
                 try {
                     this.toggleReaderMode();
                     sendResponse({ success: true });
                 } catch (error) {
-                    console.error('Word Munch: 阅读模式切换失败:', error);
+                    console.error('Word Munch: Reader mode toggle failed:', error);
                     sendResponse({ success: false, error: error.message });
                 }
                 return false;
             }
             
             if (message.type === 'CHECK_READER_STATUS') {
-                console.log('Word Munch: 检查阅读模式状态:', this.isReaderActive);
+                console.log('Word Munch: Check reader mode status:', this.isReaderActive);
                 sendResponse({ 
                     isReaderActive: this.isReaderActive,
                     success: true 
@@ -2379,7 +2136,7 @@ class SimpleReaderMode {
 
             if (message.type === 'UPDATE_FOCUS_MODE') {
                 this.focusMode = message.mode;
-                console.log('Word Munch: 更新专注模式为:', this.focusMode);
+                console.log('Word Munch: Update focus mode to:', this.focusMode);
                 
                 if (this.isFocusMode) {
                     this.applyFocusMode();
@@ -2402,31 +2159,31 @@ class SimpleReaderMode {
 
     async activateReaderMode() {
         try {
-            console.log('Word Munch: 激活简单阅读模式');
+            console.log('Word Munch: Activate simple reader mode');
             
             if (typeof Readability === 'undefined') {
-                console.error('Word Munch: Readability 库未加载');
-                alert('Readability 库未加载，请刷新页面重试');
+                console.error('Word Munch: Readability library not loaded');
+                alert('Readability library not loaded, please refresh page and retry');
                 return;
             }
 
             if (typeof isProbablyReaderable === 'function') {
                 const isReadable = isProbablyReaderable(document);
-                console.log('Word Munch: 页面可读性检查:', isReadable);
+                console.log('Word Munch: Page readability check:', isReadable);
                 
                 if (!isReadable) {
-                    const proceed = confirm('当前页面可能不适合阅读模式，是否继续？');
+                    const proceed = confirm('Current page may not be suitable for reader mode, continue?');
                     if (!proceed) return;
                 }
             }
 
             if (typeof state.floatingWidget !== 'undefined' && state.floatingWidget) {
-                console.log('Word Munch: 关闭现有浮动窗口');
+                console.log('Word Munch: Close existing floating widget');
                 WidgetManager.closeFloatingWidget();
             }
 
             this.originalScrollPosition = window.scrollY;
-            console.log('Word Munch: 保存滚动位置:', this.originalScrollPosition);
+            console.log('Word Munch: Save scroll position:', this.originalScrollPosition);
 
             const documentClone = document.cloneNode(true);
             this.fixRelativeUrls(documentClone);
@@ -2440,8 +2197,8 @@ class SimpleReaderMode {
             const article = reader.parse();
 
             if (!article || !article.textContent || article.textContent.trim().length === 0) {
-                console.error('Word Munch: 无法提取文章内容');
-                alert('无法提取文章内容');
+                console.error('Word Munch: Cannot extract article content');
+                alert('Cannot extract article content');
                 return;
             }
 
@@ -2450,16 +2207,16 @@ class SimpleReaderMode {
             this.renderSimpleReader(article);
             this.isReaderActive = true;
             
-            console.log('Word Munch: 简单阅读模式已激活');
+            console.log('Word Munch: Simple reader mode activated');
 
         } catch (error) {
-            console.error('Word Munch: 激活阅读模式失败:', error);
-            alert('阅读模式启动失败：' + error.message);
+            console.error('Word Munch: Failed to activate reader mode:', error);
+            alert('Reader mode startup failed: ' + error.message);
         }
     }
 
     renderSimpleReader(article) {
-        console.log('Word Munch: 开始渲染阅读器');
+        console.log('Word Munch: Start rendering reader');
         
         const readerContainer = document.createElement('div');
         readerContainer.id = 'word-munch-reader-container';
@@ -2487,16 +2244,16 @@ class SimpleReaderMode {
                 <div class="reader-header">
                     <div class="header-controls">
                         <div class="left-controls">
-                            <button id="exitReaderBtn" class="exit-btn">← 退出阅读</button>
+                            <button id="exitReaderBtn" class="exit-btn">← Exit Reading</button>
                         </div>
                         <div class="right-controls">
-                            <button id="chunkToggleBtn" class="control-btn">📑 分段模式</button>
-                            <button id="colorToggleBtn" class="control-btn" style="display:none;">🌈 彩色分段</button>
+                            <button id="chunkToggleBtn" class="control-btn">📑 Chunk Mode</button>
+                            <button id="colorToggleBtn" class="control-btn" style="display:none;">🌈 Color Mode</button>
                         </div>
                     </div>
                     
                     <h1 class="article-title">${article.title}</h1>
-                    ${article.byline ? `<div class="article-byline">作者：${article.byline}</div>` : ''}
+                    ${article.byline ? `<div class="article-byline">Author: ${article.byline}</div>` : ''}
                 </div>
                 
                 <div class="reader-content" id="readerContent">
@@ -2564,7 +2321,7 @@ class SimpleReaderMode {
     }
 
     exitReaderMode() {
-        console.log('Word Munch: 退出阅读模式');
+        console.log('Word Munch: Exit reader mode');
         
         this.removeKeyboardListener();
         
@@ -2596,7 +2353,7 @@ class SimpleReaderMode {
     }
 
     async createTextChunks(textContent) {
-        console.log('Word Munch: 创建文本分段');
+        console.log('Word Munch: Create text chunks');
         
         try {
             if (typeof window.createFiveLanguageChunker === 'function') {
@@ -2607,11 +2364,11 @@ class SimpleReaderMode {
                 });
                 
                 const chunks = await semanticChunker.createChunks(textContent);
-                console.log('Word Munch: 语义分段完成，共', chunks.length, '段');
+                console.log('Word Munch: Semantic chunking complete,', chunks.length, 'chunks');
                 return chunks;
             }
         } catch (error) {
-            console.error('Word Munch: 语义分段失败，使用原始方法:', error);
+            console.error('Word Munch: Semantic chunking failed, use original method:', error);
         }
         
         return this.createTextChunksOriginal(textContent);
@@ -2631,13 +2388,13 @@ class SimpleReaderMode {
         const maxLength = 800;
 
         for (const sentence of sentences) {
-            const testChunk = currentChunk + (currentChunk ? ' ' : '') + sentence + '。';
+            const testChunk = currentChunk + (currentChunk ? ' ' : '') + sentence + '.';
             
             if (testChunk.length > targetLength && currentChunk) {
                 if (testChunk.length < maxLength) {
                     currentChunk = testChunk.slice(0, -1);
                 } else {
-                    chunks.push(currentChunk + '。');
+                    chunks.push(currentChunk + '.');
                     currentChunk = sentence;
                 }
             } else {
@@ -2646,7 +2403,7 @@ class SimpleReaderMode {
         }
 
         if (currentChunk.trim()) {
-            chunks.push(currentChunk + '。');
+            chunks.push(currentChunk + '.');
         }
 
         const rawChunks = chunks.filter(chunk => chunk.length > 50);
@@ -2695,7 +2452,7 @@ class SimpleReaderMode {
 
         if (this.isChunkedMode) {
             this.renderChunkedContent(readerContent);
-            chunkToggleBtn.textContent = '📄 普通模式';
+            chunkToggleBtn.textContent = '📄 Normal Mode';
             chunkToggleBtn.classList.add('active');
             if (colorToggleBtn) colorToggleBtn.style.display = 'block';
             
@@ -2703,7 +2460,7 @@ class SimpleReaderMode {
             this.isFocusMode = false;
         } else {
             this.renderNormalContent(readerContent);
-            chunkToggleBtn.textContent = '📑 分段模式';
+            chunkToggleBtn.textContent = '📑 Chunk Mode';
             chunkToggleBtn.classList.remove('active');
             if (colorToggleBtn) {
                 colorToggleBtn.style.display = 'none';
@@ -2750,11 +2507,11 @@ class SimpleReaderMode {
                     
                     // 只有在没有选中文本时才触发段落聚焦
                     if (!selectedText || selectedText.length === 0) {
-                        console.log('Word Munch: 段落点击聚焦，索引:', index);
+                        console.log('Word Munch: Paragraph click focus, index:', index);
                         this.currentChunkIndex = index;
                         this.focusChunk(chunk, index);
                     } else {
-                        console.log('Word Munch: 检测到文本选择，跳过段落聚焦');
+                        console.log('Word Munch: Text selection detected, skip paragraph focus');
                     }
                 }
             });
@@ -2774,7 +2531,7 @@ class SimpleReaderMode {
         container.classList.remove('focus-mode');
         this.isFocusMode = false;
         
-        console.log('Word Munch: 分段内容渲染完成，文本选择已启用');
+        console.log('Word Munch: Chunked content rendering complete, text selection enabled');
     }
 
     renderNormalContent(container) {
@@ -2876,11 +2633,11 @@ class SimpleReaderMode {
 
         if (this.isColorMode) {
             readerContent.classList.add('color-mode');
-            colorToggleBtn.textContent = '⚪ 统一颜色';
+            colorToggleBtn.textContent = '⚪ Unified Color';
             colorToggleBtn.classList.add('active');
         } else {
             readerContent.classList.remove('color-mode');
-            colorToggleBtn.textContent = '🌈 彩色分段';
+            colorToggleBtn.textContent = '🌈 Color Mode';
             colorToggleBtn.classList.remove('active');
         }
     }
