@@ -445,14 +445,65 @@ class WidgetManager {
         state.isConceptMode = isConceptAnalysis;
         
         const widgetWidth = isConceptAnalysis ? 400 : 300;
-        const x = Math.min(rect.left, window.innerWidth - widgetWidth);
-        const y = rect.bottom + 10 > window.innerHeight ? rect.top - 10 : rect.bottom + 10;
+        const widgetHeight = isConceptAnalysis ? 500 : 200; // 估算高度
+        
+        // 智能位置计算
+        let x, y;
+        
+        if (isConceptAnalysis) {
+            // Concept Muncher: 优先显示在屏幕中心附近
+            console.log('Word Munch: Concept Muncher 使用中心定位');
+            
+            const centerX = window.innerWidth / 2 - widgetWidth / 2;
+            const centerY = window.innerHeight / 2 - widgetHeight / 2;
+            
+            // 检查选择区域位置，避免遮挡
+            const selectionCenterY = rect.top + rect.height / 2;
+            
+            if (Math.abs(selectionCenterY - centerY) < 100) {
+                // 如果选择区域太接近中心，偏移窗口位置
+                if (selectionCenterY < window.innerHeight / 2) {
+                    // 选择在上半部分，窗口显示在下半部分
+                    y = Math.min(centerY + 150, window.innerHeight - widgetHeight - 20);
+                } else {
+                    // 选择在下半部分，窗口显示在上半部分
+                    y = Math.max(centerY - 150, 20);
+                }
+            } else {
+                y = centerY;
+            }
+            
+            x = centerX;
+            
+            // 边界检查
+            x = Math.max(20, Math.min(x, window.innerWidth - widgetWidth - 20));
+            y = Math.max(20, Math.min(y, window.innerHeight - widgetHeight - 20));
+            
+        } else {
+            // Word Muncher: 使用原来的逻辑（靠近选择区域）
+            console.log('Word Munch: Word Muncher 使用选择区域定位');
+            x = Math.min(rect.left, window.innerWidth - widgetWidth - 20);
+            y = rect.bottom + 10 > window.innerHeight - 100 ? rect.top - 10 : rect.bottom + 10;
+            
+            // 边界检查
+            x = Math.max(20, x);
+            y = Math.max(20, Math.min(y, window.innerHeight - 200));
+        }
+        
+        console.log('Word Munch: 窗口位置计算结果:', { x, y, widgetWidth, isConceptAnalysis });
         
         state.floatingWidget.style.left = `${x}px`;
         state.floatingWidget.style.top = `${y}px`;
         state.floatingWidget.style.width = `${widgetWidth}px`;
         state.floatingWidget.style.position = 'fixed';
         state.floatingWidget.style.zIndex = '10000';
+        
+        // 在阅读模式中使用更高的 z-index
+        const isInReaderMode = document.getElementById('word-munch-reader-container');
+        if (isInReaderMode) {
+            state.floatingWidget.style.zIndex = '2147483648';
+            console.log('Word Munch: 阅读模式中，使用更高 z-index');
+        }
         
         let content;
         if (isConceptAnalysis) {
@@ -1482,6 +1533,14 @@ class HighlightManager {
             return;
         }
         
+        // 检查是否在阅读模式中
+        const isInReaderMode = document.getElementById('word-munch-reader-container');
+        if (isInReaderMode) {
+            console.log('Word Munch: 在阅读模式中，使用特殊高亮逻辑');
+            this.highlightInReaderMode(segments);
+            return;
+        }
+        
         try {
             const originalRange = state.currentSelection.range;
             const originalText = state.currentSelection.text;
@@ -1548,6 +1607,86 @@ class HighlightManager {
             
         } catch (error) {
             console.error('Word Munch: 原文高亮失败:', error);
+        }
+    }
+
+    // 在阅读模式中的高亮处理
+    static highlightInReaderMode(segments) {
+        console.log('Word Munch: 在阅读模式中创建高亮');
+        
+        try {
+            const originalRange = state.currentSelection.range;
+            const originalText = state.currentSelection.text;
+            
+            state.highlightRanges = [];
+            state.originalHighlightElements = [];
+            
+            let currentOffset = 0;
+            segments.forEach((segment, index) => {
+                const segmentStart = originalText.indexOf(segment.text, currentOffset);
+                if (segmentStart === -1) return;
+                
+                try {
+                    const segmentRange = document.createRange();
+                    segmentRange.setStart(originalRange.startContainer, originalRange.startOffset + segmentStart);
+                    segmentRange.setEnd(originalRange.startContainer, originalRange.startOffset + segmentStart + segment.text.length);
+                    
+                    const segmentRect = segmentRange.getBoundingClientRect();
+                    
+                    const highlight = document.createElement('div');
+                    highlight.className = `word-munch-segment-highlight ${segment.level} reader-mode-highlight`;
+                    highlight.style.position = 'fixed';
+                    highlight.style.left = `${segmentRect.left}px`;
+                    highlight.style.top = `${segmentRect.top}px`;
+                    highlight.style.width = `${segmentRect.width}px`;
+                    highlight.style.height = `${segmentRect.height}px`;
+                    highlight.style.pointerEvents = 'none';
+                    highlight.style.borderRadius = '3px';
+                    highlight.style.opacity = '0.4'; // 在阅读模式中稍微明显一些
+                    highlight.style.zIndex = '2147483649'; // 比阅读模式和浮动窗口都高
+                    highlight.style.transition = 'all 0.1s ease-out';
+                    
+                    const colors = {
+                        'excellent': '#059669',
+                        'good': '#16a34a',
+                        'fair': '#ca8a04',
+                        'partial': '#ea580c',
+                        'poor': '#ef4444'
+                    };
+                    highlight.style.backgroundColor = colors[segment.level] || '#6b7280';
+                    
+                    // 在阅读模式中，将高亮添加到阅读容器中
+                    const readerContainer = document.getElementById('word-munch-reader-container');
+                    if (readerContainer) {
+                        readerContainer.appendChild(highlight);
+                    } else {
+                        document.body.appendChild(highlight);
+                    }
+                    
+                    const highlightInfo = {
+                        element: highlight,
+                        range: segmentRange.cloneRange(),
+                        level: segment.level,
+                        text: segment.text,
+                        isInReaderMode: true
+                    };
+                    
+                    state.highlightRanges.push(highlightInfo);
+                    state.originalHighlightElements.push(highlight);
+                    
+                    currentOffset = segmentStart + segment.text.length;
+                    
+                } catch (error) {
+                    console.warn('Word Munch: 创建阅读模式 segment 高亮失败:', error);
+                }
+            });
+            
+            console.log('Word Munch: 阅读模式高亮创建完成，共', state.highlightRanges.length, '个高亮元素');
+            
+            this.startScrollTracking();
+            
+        } catch (error) {
+            console.error('Word Munch: 阅读模式高亮失败:', error);
         }
     }
 
