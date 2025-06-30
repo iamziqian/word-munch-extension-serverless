@@ -1,15 +1,15 @@
-// 初始化
+// Initialize
 document.addEventListener('DOMContentLoaded', function() {
     const extensionToggle = document.getElementById('extension-toggle');
     const outputLanguage = document.getElementById('output-language');
     const status = document.getElementById('status');
     
-    // 设置开关事件监听器
+    // Set toggle event listener
     if (extensionToggle) {
-        // 监听checkbox change事件
+        // Listen to checkbox change event
         extensionToggle.addEventListener('change', handleToggleChange);
         
-        // 监听容器点击（备用方案）
+        // Listen to container click (backup solution)
         const toggleContainer = extensionToggle.closest('.toggle-switch');
         if (toggleContainer) {
             toggleContainer.addEventListener('click', function(e) {
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 设置语言选择事件
+    // Set language selection event
     if (outputLanguage) {
         outputLanguage.addEventListener('change', function() {
             saveSettings();
@@ -29,32 +29,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 加载设置
+    // Load settings
     loadSettings();
     
-    // 初始化用户相关功能
+    // Initialize user-related features
     // initializeUser();
     
-    // 加载统计
+    // Load statistics
     loadStatistics();
     
-    // 处理开关状态改变
+    // Handle toggle status change
     function handleToggleChange(event) {
         const isEnabled = event.target.checked;
-        console.log('开关状态改变:', isEnabled);
+        console.log('Toggle status changed:', isEnabled);
         
-        // 更新状态显示
+        // Update status display
         if (status) {
             status.textContent = isEnabled ? '扩展已启用' : '扩展已禁用';
             status.style.color = isEnabled ? '#28a745' : '#dc3545';
         }
         
-        // 保存设置
+        // Save settings
         saveSettings();
         notifyBackground();
     }
     
-    // 保存设置
+    // Save settings
     function saveSettings() {
         if (!extensionToggle || !outputLanguage) return;
         
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 加载设置
+    // Load settings
     function loadSettings() {
         if (!chrome?.storage) {
             return;
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
         chrome.storage.sync.get(['extensionEnabled', 'outputLanguage'], function(result) {
             if (extensionToggle) {
                 extensionToggle.checked = result.extensionEnabled !== false;
-                // 更新状态显示
+                // Update status display
                 if (status) {
                     const isEnabled = extensionToggle.checked;
                     status.textContent = isEnabled ? '扩展已启用' : '扩展已禁用';
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 通知background脚本
+    // Notify background script
     function notifyBackground() {
         if (!chrome?.runtime || !extensionToggle || !outputLanguage) return;
         
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
         chrome.runtime.sendMessage(message);
     }
     
-    // 初始化用户功能
+    // Initialize user features
     // function initializeUser() {
     //     const loginBtn = document.getElementById('login-btn');
     //     const registerBtn = document.getElementById('register-btn');
@@ -116,47 +116,47 @@ document.addEventListener('DOMContentLoaded', function() {
     //         loginBtn.addEventListener('click', handleLogin);
     //     }
     //     if (registerBtn) {
-    //         registerBtn.addEventListener('click', () => showMessage('注册功能暂未实现', 'info'));
+    //         registerBtn.addEventListener('click', () => showMessage('Registration function not implemented yet', 'info'));
     //     }
     //     if (logoutBtn) {
     //         logoutBtn.addEventListener('click', handleLogout);
     //     }
         
-    //     // 加载用户状态
+    //     // Load user status
     //     loadUserInfo();
     // }
     
-    // 处理登录
+    // Handle login
     function handleLogin() {
         const emailInput = document.getElementById('email-input');
         const passwordInput = document.getElementById('password-input');
         
         if (!emailInput?.value || !passwordInput?.value) {
-            showMessage('请填写邮箱和密码', 'error');
+            showMessage('Please fill in email and password', 'error');
             return;
         }
         
         const email = emailInput.value.trim();
         
-        // 模拟登录
+        // Simulate login
         chrome.storage.sync.set({
             userEmail: email,
             userToken: 'mock_token_' + Date.now()
         }, function() {
-            showMessage('登录成功', 'success');
+            showMessage('Login successful', 'success');
             loadUserInfo();
         });
     }
     
-    // 处理退出登录
+    // Handle logout
     function handleLogout() {
         chrome.storage.sync.remove(['userEmail', 'userToken'], function() {
-            showMessage('已退出登录', 'success');
+            showMessage('Logged out successfully', 'success');
             loadUserInfo();
         });
     }
     
-    // 加载用户信息
+    // Load user information
     function loadUserInfo() {
         if (!chrome?.storage) return;
         
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 加载统计信息
+    // Load statistics information
     function loadStatistics() {
         if (!chrome?.storage) return;
         
@@ -195,7 +195,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 显示消息提示
+    // Show message prompt
     function showMessage(message, type = 'info') {
         const existingMessage = document.querySelector('.popup-message');
         if (existingMessage) {
@@ -226,14 +226,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         type: 'TOGGLE_READER_MODE'
                     }, function(response) {
                         if (chrome.runtime.lastError) {
-                            console.error('发送阅读模式消息失败:', chrome.runtime.lastError.message);
+                            console.error('Failed to send reading mode message:', chrome.runtime.lastError.message);
                             if (chrome.runtime.lastError.message.includes('Could not establish connection')) {
-                                showMessage('请刷新页面后重试', 'error');
+                                showMessage('Please refresh the page and try again', 'error');
                             }
-                            // 移除其他错误提示，避免误报
+                            // Remove other error prompts to avoid false reporting
                         } else {
-                            // 只要没有运行时错误，就关闭popup（不管response内容）
-                            console.log('阅读模式消息已发送');
+                            // If there is no runtime error, close the popup (regardless of the response content)
+                            console.log('Reading mode message sent');
                             window.close();
                         }
                     });
@@ -242,27 +242,27 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // 专注模式设置
+    // Focus mode setting
     const focusModes = document.querySelector('.focus-modes');
     const modeOptions = document.querySelectorAll('.mode-option');
 
     if (focusModes && modeOptions.length > 0) {
-        // 加载保存的设置
+        // Load saved settings
         chrome.storage.sync.get(['focusMode'], function(result) {
             const savedMode = result.focusMode || 'balanced';
             selectFocusMode(savedMode);
         });
         
-        // 绑定模式选择事件
+        // Bind mode selection event
         modeOptions.forEach(option => {
             option.addEventListener('click', function() {
                 const mode = this.dataset.mode;
                 selectFocusMode(mode);
                 
-                // 保存设置
+                // Save settings
                 chrome.storage.sync.set({ focusMode: mode });
                 
-                // 通知content script更新设置
+                // Notify content script to update settings
                 chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
                     if (tabs[0]) {
                         chrome.tabs.sendMessage(tabs[0].id, {
@@ -275,19 +275,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 选择专注模式
+    // Select focus mode
     function selectFocusMode(mode) {
-        // 更新选中状态
+        // Update selected state
         modeOptions.forEach(option => {
             option.classList.toggle('active', option.dataset.mode === mode);
         });
         
-        // 更新预览效果
+        // Update preview effect
         const focusPreview = document.querySelector('.focus-preview');
         if (focusPreview) {
             focusPreview.setAttribute('data-mode', mode);
         }
         
-        console.log('Word Munch: 选择专注模式:', mode);
+        console.log('Word Munch: Select focus mode:', mode);
     }
 });

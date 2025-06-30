@@ -78,14 +78,14 @@ class TextComprehensionAnalyzer:
         if cached_segments:
             return cached_segments
         
-        # 判断是否为单句话
+        # Determine whether it is a single sentence
         is_single_sentence = self._is_single_sentence(text)
         
         if is_single_sentence:
-            # 使用phrase分割
+            # segment by phrase
             segments = self._perform_phrase_segmentation(text)
         else:
-            # 使用sentence分割
+            # segment by sentence
             segments = self._perform_text_segmentation(text)
         
         # Cache results
@@ -95,22 +95,22 @@ class TextComprehensionAnalyzer:
     
     def _is_single_sentence(self, text: str) -> bool:
         """
-        判断文本是否为单句话
-        规则：
-        1. 只有一个句子结束符（.!?）
-        2. 或者没有句子结束符
-        3. 或者总词数少于20个词
+        Determine if the text is a single sentence
+        Rules:
+        1. Only one sentence ending symbol (.!?)
+        2. Or no sentence ending symbol
+        3. Or total word count less than 20
         """
-        # 清理文本
+        # Clean text
         text = text.strip()
         
-        # 统计句子结束符（排除小数点）
+        # Count sentence ending symbols (excluding decimal points)
         sentence_endings = re.findall(r'(?<!\d)[.!?。！？](?!\d)', text)
         
-        # 词数统计
+        # Count words
         word_count = len(text.split())
         
-        # 判断条件
+        # Determine conditions
         if len(sentence_endings) <= 1 and word_count <= 20:
             return True
         elif len(sentence_endings) == 0:
@@ -121,29 +121,29 @@ class TextComprehensionAnalyzer:
     
     def _perform_phrase_segmentation(self, text: str) -> List[Dict[str, Any]]:
         """
-        执行phrase级别的分割
-        基于语法结构和标点符号进行更细粒度的分割
+        Execute phrase-level segmentation
+        Based on grammar structure and punctuation for more granular segmentation
         """
         segments = []
         
-        # Phrase分割规则：
-        # 1. 逗号、分号、冒号分割
-        # 2. 连词分割 (and, but, or, however, therefore, etc.)
-        # 3. 介词短语分割
-        # 4. 关键词分割点
+        # Phrase segmentation rules:
+        # 1. Comma, semicolon, colon
+        # 2. Conjunction (and, but, or, however, therefore, etc.)
+        # 3. Prepositional phrase
+        # 4. Keyword split point
         
-        # 分割模式
+        # Segmentation pattern
         phrase_patterns = [
-            r'[,;:]',  # 标点符号
-            r'\s+(?:and|but|or|however|therefore|moreover|furthermore|additionally|consequently)\s+',  # 连词
-            r'\s+(?:in|on|at|by|for|with|through|during|after|before|since|until)\s+',  # 介词
-            r'\s+(?:such as|for example|including|like)\s+',  # 举例词
+            r'[,;:]',  # Punctuation
+            r'\s+(?:and|but|or|however|therefore|moreover|furthermore|additionally|consequently)\s+',  # Conjunction
+            r'\s+(?:in|on|at|by|for|with|through|during|after|before|since|until)\s+',  # Preposition
+            r'\s+(?:such as|for example|including|like)\s+',  # Example word
         ]
         
-        # 合并所有模式
+        # Merge all patterns
         combined_pattern = '|'.join(f'({pattern})' for pattern in phrase_patterns)
         
-        # 执行分割
+        # Execute segmentation
         parts = re.split(combined_pattern, text)
         
         current_pos = 0
@@ -157,10 +157,10 @@ class TextComprehensionAnalyzer:
             if not part:
                 continue
             
-            # 如果是分隔符，结束当前phrase
+            # If it is a separator, end the current phrase
             if re.match(combined_pattern, part):
                 if current_phrase:
-                    # 添加当前phrase
+                    # Add current phrase
                     start_pos = text.find(current_phrase, current_pos)
                     if start_pos == -1:
                         start_pos = current_pos
@@ -170,20 +170,20 @@ class TextComprehensionAnalyzer:
                         "text": current_phrase.strip(),
                         "start": start_pos,
                         "end": end_pos,
-                        "type": "phrase",  # 标记为phrase类型
+                        "type": "phrase",  # Mark as phrase type
                         "level": "primary"
                     })
                     
                     current_pos = end_pos
                     current_phrase = ""
             else:
-                # 累积phrase内容
+                # Accumulate phrase content
                 if current_phrase:
                     current_phrase += " " + part
                 else:
                     current_phrase = part
         
-        # 处理最后一个phrase
+        # Process the last phrase
         if current_phrase:
             start_pos = text.find(current_phrase, current_pos)
             if start_pos == -1:
@@ -198,7 +198,7 @@ class TextComprehensionAnalyzer:
                 "level": "primary"
             })
         
-        # 如果分割结果太少，使用备用方案
+        # If the segmentation result is too few, use the backup solution
         if len(segments) < 2:
             segments = self._fallback_phrase_segmentation(text)
         
@@ -207,11 +207,11 @@ class TextComprehensionAnalyzer:
     
     def _fallback_phrase_segmentation(self, text: str) -> List[Dict[str, Any]]:
         """
-        备用phrase分割方案：基于词数均匀分割
+        Backup phrase segmentation scheme: based on word count
         """
         words = text.split()
         if len(words) <= 3:
-            # 太短，整体作为一个phrase
+            # Too short, as a whole as a phrase
             return [{
                 "text": text,
                 "start": 0,
@@ -220,7 +220,7 @@ class TextComprehensionAnalyzer:
                 "level": "primary"
             }]
         
-        # 按词数分割成2-3个phrase
+        # Split into 2-3 phrases based on word count
         segments = []
         words_per_phrase = max(3, len(words) // 2)
         

@@ -1,23 +1,23 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Word Munch 控制面板</title>
+    <title>Word Munch Control Panel</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1 class="title">Word Munch</h1>
-            <p class="subtitle">智能词汇简化</p>
+            <p class="subtitle">Smart word simplification</p>
         </header>
         
         <div class="main-content">
-            <!-- 扩展开关 -->
+            <!-- Extension toggle -->
             <div class="control-section">
                 <div class="control-item">
-                    <label class="control-label">扩展状态</label>
+                    <label class="control-label">Extension status</label>
                     <div class="toggle-switch">
                         <input type="checkbox" id="extension-toggle" checked>
                         <span class="toggle-slider"></span>
@@ -25,9 +25,9 @@
                 </div>
             </div>
             
-            <!-- 语言设置 -->
+            <!-- Language setting -->
             <div class="control-section">
-                <h3 class="section-title">输出语言</h3>
+                <h3 class="section-title">Output language</h3>
                 <select id="output-language" class="language-select">
                     <option value="english">English</option>
                     <option value="spanish">Español</option>
@@ -37,64 +37,64 @@
                 </select>
             </div>
 
-            <!-- 阅读模式功能 -->
+            <!-- Reading mode function -->
             <div class="control-section">
-                <h3 class="section-title">阅读模式</h3>
+                <h3 class="section-title">Reading mode</h3>
                 <button id="reader-mode-btn" class="reader-mode-button">
-                    📖 启动阅读分段模式
+                    📖 Start reading chunk mode
                 </button>
             </div>
 
-            <!-- 专注模式设置 -->
+            <!-- Focus mode setting -->
             <div class="control-section">
-                <h3 class="section-title">专注设置</h3>
+                <h3 class="section-title">Focus setting</h3>
                 
                 <div class="focus-modes">
                     <div class="mode-option" data-mode="gentle">
                         <div class="mode-icon">🌸</div>
                         <div class="mode-info">
-                            <div class="mode-name">轻柔模式</div>
-                            <div class="mode-desc">保留更多上下文</div>
+                            <div class="mode-name">Gentle mode</div>
+                            <div class="mode-desc">Keep more context</div>
                         </div>
                     </div>
                     
                     <div class="mode-option active" data-mode="balanced">
                         <div class="mode-icon">⚖️</div>
                         <div class="mode-info">
-                            <div class="mode-name">平衡模式</div>
-                            <div class="mode-desc">推荐默认设置</div>
+                            <div class="mode-name">Balanced mode</div>
+                            <div class="mode-desc">Recommended default setting</div>
                         </div>
                     </div>
                     
                     <div class="mode-option" data-mode="focused">
                         <div class="mode-icon">🎯</div>
                         <div class="mode-info">
-                            <div class="mode-name">专注模式</div>
-                            <div class="mode-desc">强烈突出当前段</div>
+                            <div class="mode-name">Focused mode</div>
+                            <div class="mode-desc">Strongly highlight current paragraph</div>
                         </div>
                     </div>
                     
                     <div class="mode-option" data-mode="minimal">
                         <div class="mode-icon">🔍</div>
                         <div class="mode-info">
-                            <div class="mode-name">极简模式</div>
-                            <div class="mode-desc">几乎隐藏其他段</div>
+                            <div class="mode-name">Minimal mode</div>
+                            <div class="mode-desc">Almost hide other paragraphs</div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="focus-preview">
                     <div class="preview-text">
-                        <div class="preview-line unfocused">其他段落的显示效果</div>
-                        <div class="preview-line focused">当前聚焦段落效果</div>
-                        <div class="preview-line unfocused">其他段落的显示效果</div>
+                        <div class="preview-line unfocused">Display effect of other paragraphs</div>
+                        <div class="preview-line focused">Display effect of focused paragraph</div>
+                        <div class="preview-line unfocused">Display effect of other paragraphs</div>
                     </div>
                 </div>
             </div>
             
-            <!-- 用户登录状态 -->
+            <!-- User login status -->
             <!-- <div class="control-section" id="user-section">
-                <h3 class="section-title">用户状态</h3>
+                <h3 class="section-title">User status</h3>
                 <div id="login-form" class="login-form">
                     <input type="email" id="email-input" placeholder="邮箱地址" class="input-field">
                     <input type="password" id="password-input" placeholder="密码" class="input-field">
@@ -114,28 +114,28 @@
                 </div>
             </div> -->
             
-            <!-- 统计信息 -->
+            <!-- Statistics -->
             <div class="control-section">
-                <h3 class="section-title">使用统计</h3>
+                <h3 class="section-title">Usage statistics</h3>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div class="stat-number" id="today-count">0</div>
-                        <div class="stat-label">今日划词</div>
+                        <div class="stat-label">Today selection</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number" id="week-count">0</div>
-                        <div class="stat-label">本周划词</div>
+                        <div class="stat-label">This week selection</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number" id="total-count">0</div>
-                        <div class="stat-label">总划词数</div>
+                        <div class="stat-label">Total selection</div>
                     </div>
                 </div>
             </div>
         </div>
         
         <footer class="footer">
-            <div class="status" id="status">扩展已启用</div>
+            <div class="status" id="status">Extension enabled</div>
         </footer>
     </div>
     

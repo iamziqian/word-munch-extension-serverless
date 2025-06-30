@@ -61,7 +61,7 @@ body {
     margin-bottom: 12px;
 }
 
-/* 开关样式 - 改进版 */
+/* Toggle style - improved version */
 .control-item {
     display: flex;
     justify-content: space-between;
@@ -78,7 +78,7 @@ body {
     width: 50px;
     height: 24px;
     cursor: pointer;
-    /* 确保整个容器可点击 */
+    /* Ensure the entire container is clickable */
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
@@ -93,7 +93,7 @@ body {
     margin: 0;
     cursor: pointer;
     z-index: 2;
-    /* 确保input在最上层，可以接收点击 */
+    /* Ensure input is on top, can receive clicks */
 }
 
 .toggle-slider {
@@ -107,7 +107,7 @@ body {
     transition: 0.3s;
     border-radius: 24px;
     z-index: 1;
-    /* 确保滑块在input下方 */
+    /* Ensure the slider is below the input */
 }
 
 .toggle-slider:before {
@@ -145,7 +145,7 @@ input:focus + .toggle-slider {
     outline-offset: 2px;
 }
 
-/* 确保禁用状态也能正确显示 */
+/* Ensure disabled state is also displayed correctly */
 input:disabled + .toggle-slider {
     opacity: 0.5;
     cursor: not-allowed;
@@ -155,7 +155,7 @@ input:disabled + .toggle-slider:before {
     cursor: not-allowed;
 }
 
-/* 单选按钮样式 */
+/* Single select button style */
 .radio-group {
     display: flex;
     flex-direction: column;
@@ -179,7 +179,7 @@ input:disabled + .toggle-slider:before {
     color: #555;
 }
 
-/* 语言选择 */
+/* Language selection */
 .language-select {
     width: 100%;
     padding: 10px 12px;
@@ -196,7 +196,7 @@ input:disabled + .toggle-slider:before {
     border-color: #667eea;
 }
 
-/* 登录表单 */
+/* Login form */
 .login-form {
     display: flex;
     flex-direction: column;
@@ -270,7 +270,7 @@ input:disabled + .toggle-slider:before {
     background: #e9ecef;
 }
 
-/* 用户信息 */
+/* User information */
 .user-info {
     display: flex;
     align-items: center;
@@ -300,7 +300,7 @@ input:disabled + .toggle-slider:before {
     margin-bottom: 4px;
 }
 
-/* 统计信息 */
+/* Statistics */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -341,7 +341,7 @@ input:disabled + .toggle-slider:before {
     font-weight: 500;
 }
 
-/* 消息提示样式 */
+/* Message prompt style */
 .popup-message {
     animation: slideInTop 0.3s ease-out;
 }
@@ -357,7 +357,7 @@ input:disabled + .toggle-slider:before {
     }
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 400px) {
     .container {
         width: 320px;
@@ -372,7 +372,7 @@ input:disabled + .toggle-slider:before {
     }
 }
 
-/* 调试样式改进 */
+/* Debug style improvement */
 .control-section[style*="background: #f8f9fa"] {
     border: 1px solid #e1e5e9;
     margin-bottom: 16px !important;
@@ -384,7 +384,7 @@ input:disabled + .toggle-slider:before {
     color: #666;
 }
 
-/* 确保所有交互元素都有正确的cursor */
+/* Ensure all interactive elements have the correct cursor */
 button, 
 input[type="checkbox"], 
 input[type="radio"], 
@@ -399,7 +399,7 @@ input:disabled {
     cursor: not-allowed;
 }
 
-/* 阅读模式按钮样式 */
+/* Reading mode button style */
 .reader-mode-button {
     width: 100%;
     padding: 12px 16px;
@@ -419,7 +419,7 @@ input:disabled {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
-/* 专注模式设置样式 */
+/* Focus mode setting style */
 .focus-modes {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -474,7 +474,7 @@ input:disabled {
     line-height: 1.2;
 }
 
-/* 预览区域 */
+/* Preview area */
 .focus-preview {
     background: #f8f9fa;
     border-radius: 8px;
@@ -499,15 +499,15 @@ input:disabled {
     border-left: 3px solid #667eea;
     color: #333;
     font-weight: 500;
-    opacity: 1 !important; /* 确保聚焦段落始终清晰 */
+    opacity: 1 !important; /* Ensure focused paragraphs are always clear */
 }
 
 .preview-line.unfocused {
     color: #999;
-    opacity: 0.5; /* 默认效果 */
+    opacity: 0.5; /* Default effect */
 }
 
-/* 不同模式的预览效果 */
+/* Preview effect for different modes */
 .focus-preview[data-mode="gentle"] .preview-line.unfocused { 
     opacity: 0.7; 
     color: #666;

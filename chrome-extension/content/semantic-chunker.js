@@ -1,41 +1,40 @@
-// 五语言增强语义分段系统
-// 支持：中文、英语、西班牙语、日语、韩语
+// Support: Chinese, English, Spanish, Japanese, Korean
 class FiveLanguageSemanticChunker {
     constructor(options = {}) {
-      // 初始化语言配置
+      // Initialize language configs
       this.initializeLanguageConfigs();
       
-      // 分段参数
+      // Chunking parameters
       this.targetLength = options.targetLength || 600;
       this.maxLength = options.maxLength || 800;
       this.minLength = options.minLength || 150;
       
-      console.log('Five Language Semantic Chunker 已初始化');
-      console.log('支持语言:', Object.keys(this.languageConfigs).join(', '));
+      console.log('Five Language Semantic Chunker initialized');
+      console.log('Supported languages:', Object.keys(this.languageConfigs).join(', '));
     }
   
-    // 初始化五种语言配置
+    // Initialize five language configs
     initializeLanguageConfigs() {
       this.languageConfigs = {
         chinese: {
-          name: '中文',
+          name: 'Chinese',
           code: 'zh',
           punctuation: /[。！？；]/,
           splitPattern: /[。！？；]\s*/,
           charPattern: /[\u4e00-\u9fff]/,
           wordPattern: /[\u4e00-\u9fff]{1,}/g,
           transitionWords: [
-            // 顺序词
+            // Sequence words
             '首先', '其次', '然后', '接着', '最后', '最终',
             '第一', '第二', '第三', '一方面', '另一方面',
             '一是', '二是', '三是', '四是', '五是',
             
-            // 逻辑词
+            // Logical words
             '因此', '所以', '由于', '因为', '既然', '如果',
             '但是', '然而', '不过', '虽然', '尽管', '即使',
             '而且', '另外', '此外', '同时', '与此同时',
             
-            // 举例词
+            // Example words
             '例如', '比如', '譬如', '具体来说', '换句话说',
             '也就是说', '总的来说', '综上所述', '由此可见',
             '可见', '显然', '事实上', '实际上', '总之'
@@ -197,64 +196,64 @@ class FiveLanguageSemanticChunker {
       };
     }
   
-    // 主要的语义分段方法
+    // Main semantic chunking method
     async createSemanticChunks(textContent) {
-      console.log('🚀 开始五语言语义分段，文本长度:', textContent.length);
+      console.log('🚀 Start five language semantic chunking, text length:', textContent.length);
       
-      // 预处理文本
+      // Preprocess text
       const cleanText = this.preprocessText(textContent);
       
-      // 检测语言分布
+      // Detect language distribution
       const languageDistribution = this.detectLanguageDistribution(cleanText);
-      console.log('🌍 语言分布:', this.formatLanguageDistribution(languageDistribution));
+      console.log('🌍 Language distribution:', this.formatLanguageDistribution(languageDistribution));
       
-      // 选择分段策略
+      // Select chunking strategy
       let chunks = [];
       if (this.isMixedLanguage(languageDistribution)) {
-        console.log('📝 使用混合语言分段策略');
+        console.log('📝 Use mixed language chunking strategy');
         chunks = this.mixedLanguageChunking(cleanText, languageDistribution);
       } else {
         const primaryLanguage = this.getPrimaryLanguage(languageDistribution);
-        console.log('📝 使用单语言分段策略:', this.languageConfigs[primaryLanguage]?.name || primaryLanguage);
+        console.log('📝 Use single language chunking strategy:', this.languageConfigs[primaryLanguage]?.name || primaryLanguage);
         chunks = this.singleLanguageChunking(cleanText, primaryLanguage);
       }
       
-      // 后处理优化
+      // Post-process optimization
       chunks = this.postProcessChunks(chunks);
       
-      console.log('✅ 语义分段完成');
+      console.log('✅ Semantic chunking completed');
       this.logChunkSummary(chunks);
       
       return chunks;
     }
   
-    // 预处理文本
+    // Preprocess text
     preprocessText(text) {
       return text
-        .replace(/\s+/g, ' ')  // 标准化空白字符
-        .replace(/\n{2,}/g, '\n\n')  // 保留段落分隔
+        .replace(/\s+/g, ' ')  // Standardize whitespace
+        .replace(/\n{2,}/g, '\n\n')  // Preserve paragraph separation
         .trim();
     }
   
-    // 检测语言分布
+    // Detect language distribution
     detectLanguageDistribution(text) {
       const distribution = {};
       let totalRelevantChars = 0;
       
-      // 统计各语言字符数
+      // Count characters for each language
       for (const [langCode, config] of Object.entries(this.languageConfigs)) {
         const matches = text.match(new RegExp(config.charPattern, 'g')) || [];
         const count = matches.length;
         distribution[langCode] = {
           count: count,
-          percentage: 0, // 稍后计算
+          percentage: 0, // Calculate later
           name: config.name,
           code: config.code
         };
         totalRelevantChars += count;
       }
       
-      // 计算百分比
+      // Calculate percentage
       if (totalRelevantChars > 0) {
         for (const langCode in distribution) {
           distribution[langCode].percentage = 
@@ -265,29 +264,29 @@ class FiveLanguageSemanticChunker {
       return distribution;
     }
   
-    // 格式化语言分布显示
+    // Format language distribution display
     formatLanguageDistribution(distribution) {
       return Object.entries(distribution)
-        .filter(([_, data]) => data.percentage > 5) // 只显示占比>5%的语言
+        .filter(([_, data]) => data.percentage > 5) // Only show languages with >5%
         .map(([langCode, data]) => 
           `${data.name}: ${data.percentage.toFixed(1)}%`
         )
         .join(', ');
     }
   
-    // 判断是否为混合语言
+    // Check if it is a mixed language
     isMixedLanguage(distribution) {
       const significantLanguages = Object.entries(distribution)
-        .filter(([_, data]) => data.percentage > 15) // 超过15%才算显著语言
+        .filter(([_, data]) => data.percentage > 15) // More than 15% is significant
         .length;
       
       return significantLanguages > 1;
     }
   
-    // 获取主要语言
+    // Get primary language
     getPrimaryLanguage(distribution) {
       let maxPercentage = 0;
-      let primaryLang = 'english'; // 默认英语
+      let primaryLang = 'english'; // Default English
       
       for (const [langCode, data] of Object.entries(distribution)) {
         if (data.percentage > maxPercentage) {
@@ -296,15 +295,15 @@ class FiveLanguageSemanticChunker {
         }
       }
       
-      // 如果没有明显的主语言，使用英语
+      // If there is no obvious primary language, use English
       return maxPercentage > 20 ? primaryLang : 'english';
     }
   
-    // 单语言分段
+    // Single language chunking
     singleLanguageChunking(text, language) {
       const config = this.languageConfigs[language];
       if (!config) {
-        console.warn('⚠️ 未找到语言配置，使用英语配置:', language);
+        console.warn('⚠️ Language config not found, use English config:', language);
         return this.singleLanguageChunking(text, 'english');
       }
       
@@ -318,12 +317,12 @@ class FiveLanguageSemanticChunker {
         const sentence = sentences[i];
         if (!sentence) continue;
   
-        // 语义分析
+        // Semantic analysis
         const hasTransition = this.hasTransitionSignal(sentence, config);
         const topicKeywords = this.extractTopicKeywords(sentence, config);
         const isTopicChanged = this.isTopicChange(currentTopic, topicKeywords.join(' '));
         
-        // 分段决策
+        // Chunking decision
         const shouldBreak = this.shouldBreakChunk(
           currentChunk, sentence, hasTransition, isTopicChanged
         );
@@ -331,7 +330,7 @@ class FiveLanguageSemanticChunker {
         if (shouldBreak && currentChunk.trim()) {
           chunks.push(this.finalizeSentence(currentChunk.trim(), config));
           chunkCount++;
-          console.log(`📄 创建段落 ${chunkCount}: ${currentChunk.length} 字符`);
+          console.log(`📄 Create paragraph ${chunkCount}: ${currentChunk.length} characters`);
           
           currentChunk = sentence;
           currentTopic = topicKeywords.join(' ');
@@ -345,50 +344,50 @@ class FiveLanguageSemanticChunker {
         }
       }
   
-      // 处理最后一个段落
+      // Handle last paragraph
       if (currentChunk.trim()) {
         chunks.push(this.finalizeSentence(currentChunk.trim(), config));
         chunkCount++;
-        console.log(`📄 创建段落 ${chunkCount}: ${currentChunk.length} 字符`);
+        console.log(`📄 Create paragraph ${chunkCount}: ${currentChunk.length} characters`);
       }
   
       return chunks;
     }
   
-    // 将文本分割为句子
+    // Split text into sentences
     splitIntoSentences(text, config) {
       return text
         .split(config.splitPattern)
         .map(s => s.trim())
-        .filter(s => s.length > 10); // 过滤太短的句子
+        .filter(s => s.length > 10); // Filter too short sentences
     }
   
-    // 判断是否需要分段
+    // Check if it needs to be chunked
     shouldBreakChunk(currentChunk, newSentence, hasTransition, isTopicChanged) {
       const currentLength = currentChunk.length;
       const testLength = currentLength + newSentence.length;
       
-      // 强制分段：超过最大长度
+      // Force chunking: exceeds max length
       if (testLength > this.maxLength) {
         return true;
       }
       
-      // 如果当前段落太短，不分段
+      // If current paragraph is too short, don't chunk
       if (currentLength < 200) {
         return false;
       }
       
-      // 语义分段：检测到转换词且长度适中
+      // Semantic chunking: detect transition word and medium length
       if (hasTransition && currentLength > 300) {
         return true;
       }
       
-      // 主题变化分段：主题变化且长度适中
+      // Topic change chunking: topic change and medium length
       if (isTopicChanged && currentLength > 400) {
         return true;
       }
       
-      // 长度控制分段：接近目标长度
+      // Length control chunking: close to target length
       if (testLength > this.targetLength && currentLength > 300) {
         return true;
       }
@@ -396,20 +395,20 @@ class FiveLanguageSemanticChunker {
       return false;
     }
   
-    // 混合语言分段
+    // Mixed language chunking
     mixedLanguageChunking(text, languageDistribution) {
-      // 按段落预分割
+      // Pre-split by paragraph
       const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
       const chunks = [];
       
       for (const paragraph of paragraphs) {
         if (paragraph.trim().length < 50) continue;
         
-        // 检测段落主要语言
+        // Detect paragraph main language
         const paragraphLangDist = this.detectLanguageDistribution(paragraph);
         const paragraphLang = this.getPrimaryLanguage(paragraphLangDist);
         
-        // 处理段落
+        // Handle paragraph
         if (paragraph.length > this.maxLength) {
           const subChunks = this.splitLongParagraph(paragraph, paragraphLang);
           chunks.push(...subChunks);
@@ -418,18 +417,18 @@ class FiveLanguageSemanticChunker {
         }
       }
       
-      // 如果段落分割效果不好，使用通用分割
+      // If paragraph splitting is not good, use universal splitting
       if (chunks.length < 3) {
-        console.log('⚠️ 段落分割效果不佳，使用通用分段');
+        console.log('⚠️ Paragraph splitting is not good, use universal splitting');
         return this.universalChunking(text);
       }
       
       return chunks;
     }
   
-    // 通用分段（适用于所有支持的语言）
+    // Universal chunking (适用于所有支持的语言）
     universalChunking(text) {
-      // 使用通用标点符号
+      // Use universal punctuation
       const universalPunctuation = /[.!?。！？]/;
       const sentences = text.split(universalPunctuation)
         .map(s => s.trim())
@@ -448,7 +447,7 @@ class FiveLanguageSemanticChunker {
           currentChunk = testChunk;
         }
         
-        // 强制分段防止过长
+        // Force chunking to prevent too long
         if (currentChunk.length > this.maxLength) {
           chunks.push(currentChunk + '.');
           currentChunk = '';
@@ -462,7 +461,7 @@ class FiveLanguageSemanticChunker {
       return chunks.filter(chunk => chunk.length > 30);
     }
   
-    // 检测转换信号
+    // Detect transition signal
     hasTransitionSignal(sentence, config) {
       const lowerSentence = sentence.toLowerCase();
       return config.transitionWords.some(word => 
@@ -470,7 +469,7 @@ class FiveLanguageSemanticChunker {
       );
     }
   
-    // 提取主题关键词
+    // Extract topic keywords
     extractTopicKeywords(sentence, config) {
       const words = sentence.match(config.wordPattern) || [];
       
@@ -478,10 +477,10 @@ class FiveLanguageSemanticChunker {
         .map(word => word.toLowerCase())
         .filter(word => !config.stopWords.includes(word))
         .filter(word => word.length >= 2)
-        .slice(0, 3); // 取前3个关键词
-    }
+        .slice(0, 3); // Take the first 3 keywords
+    } 
   
-    // 判断主题变化
+    // Check if topic change
     isTopicChange(oldTopic, newTopic) {
       if (!oldTopic || !newTopic) return false;
       
@@ -493,14 +492,14 @@ class FiveLanguageSemanticChunker {
       const commonWords = oldWords.filter(word => newWords.includes(word));
       const overlapRate = commonWords.length / Math.max(oldWords.length, newWords.length);
       
-      return overlapRate < 0.3; // 重叠率低于30%认为是主题变化
+      return overlapRate < 0.3; // If overlap rate is less than 30%, it is considered a topic change
     }
   
-    // 获取句子分隔符
+    // Get sentence separator
     getSentenceSeparator(config, currentChunk) {
       if (!currentChunk) return '';
       
-      // 根据语言特点选择分隔符
+      // Select separator based on language characteristics
       if (config === this.languageConfigs.chinese || 
           config === this.languageConfigs.japanese) {
         return '。';
@@ -509,7 +508,7 @@ class FiveLanguageSemanticChunker {
       }
     }
   
-    // 完善句子结尾
+    // Improve sentence ending
     finalizeSentence(sentence, config) {
       if (!sentence) return sentence;
       
@@ -517,7 +516,7 @@ class FiveLanguageSemanticChunker {
       const punctuationChars = ['.', '!', '?', '。', '！', '？', '¡', '¿'];
       
       if (!punctuationChars.includes(lastChar)) {
-        // 根据语言添加合适的结尾标点
+        // Add appropriate punctuation based on language
         if (config === this.languageConfigs.chinese || 
             config === this.languageConfigs.japanese) {
           return sentence + '。';
@@ -529,7 +528,7 @@ class FiveLanguageSemanticChunker {
       return sentence;
     }
   
-    // 分割长段落
+    // Split long paragraphs
     splitLongParagraph(paragraph, language) {
       const config = this.languageConfigs[language] || this.languageConfigs.english;
       const sentences = this.splitIntoSentences(paragraph, config);
@@ -555,18 +554,18 @@ class FiveLanguageSemanticChunker {
       return chunks;
     }
   
-    // 后处理优化
+    // Post-process optimization
     postProcessChunks(chunks) {
-      console.log('🔧 开始后处理优化...');
+      console.log('🔧 Start post-process optimization...');
       
       const optimized = [];
       let currentChunk = '';
       
       for (const chunk of chunks) {
-        // 合并过短的段落
+        // Merge too short paragraphs
         if (chunk.length < this.minLength && currentChunk) {
           currentChunk += ' ' + chunk;
-          console.log(`🔗 合并短段落: ${chunk.length} + ${currentChunk.length - chunk.length} = ${currentChunk.length}`);
+          console.log(`🔗 Merge short paragraphs: ${chunk.length} + ${currentChunk.length - chunk.length} = ${currentChunk.length}`);
         } else if (currentChunk && currentChunk.length > 100) {
           optimized.push(currentChunk.trim());
           currentChunk = chunk;
@@ -574,10 +573,10 @@ class FiveLanguageSemanticChunker {
           currentChunk = (currentChunk + ' ' + chunk).trim();
         }
         
-        // 防止段落过长
+        // Prevent paragraphs from being too long
         if (currentChunk.length > this.maxLength * 1.2) {
           optimized.push(currentChunk.trim());
-          console.log(`✂️ 分割过长段落: ${currentChunk.length} 字符`);
+          console.log(`✂️ Split too long paragraphs: ${currentChunk.length} characters`);
           currentChunk = '';
         }
       }
@@ -587,35 +586,35 @@ class FiveLanguageSemanticChunker {
       }
       
       const final = optimized.filter(chunk => chunk.length > 30);
-      console.log(`✅ 后处理完成: ${chunks.length} → ${final.length} 段落`);
+      console.log(`✅ Post-process completed: ${chunks.length} → ${final.length} paragraphs`);
       
       return final;
     }
   
-    // 记录分段摘要
+    // Record chunk summary
     logChunkSummary(chunks) {
-      console.log('\n📊 分段结果摘要:');
+      console.log('\n📊 Chunk summary:');
       console.log('─'.repeat(50));
       
       chunks.forEach((chunk, i) => {
         const preview = chunk.length > 40 ? chunk.substring(0, 40) + '...' : chunk;
-        console.log(`${i+1}. [${chunk.length}字符] ${preview}`);
+        console.log(`${i+1}. [${chunk.length} characters] ${preview}`);
       });
       
       const totalChars = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
       const avgLength = Math.round(totalChars / chunks.length);
       
       console.log('─'.repeat(50));
-      console.log(`📈 统计信息:`);
-      console.log(`   总段落数: ${chunks.length}`);
-      console.log(`   总字符数: ${totalChars}`);
-      console.log(`   平均长度: ${avgLength} 字符`);
-      console.log(`   最短段落: ${Math.min(...chunks.map(c => c.length))} 字符`);
-      console.log(`   最长段落: ${Math.max(...chunks.map(c => c.length))} 字符`);
+      console.log(`📈 Statistics:`);
+      console.log(`    Total paragraphs: ${chunks.length}`);
+      console.log(`    Total characters: ${totalChars}`);
+      console.log(`    Average length: ${avgLength} characters`);
+      console.log(`    Shortest paragraph: ${Math.min(...chunks.map(c => c.length))} characters`);
+      console.log(`    Longest paragraph: ${Math.max(...chunks.map(c => c.length))} characters`);
       console.log('─'.repeat(50));
     }
   
-    // 获取支持的语言列表
+    // Get supported language list
     getSupportedLanguages() {
       return Object.entries(this.languageConfigs).map(([code, config]) => ({
         code: code,
@@ -624,13 +623,13 @@ class FiveLanguageSemanticChunker {
       }));
     }
   
-    // 设置分段参数
+    // Set chunking parameters
     setChunkingParameters(options) {
       if (options.targetLength) this.targetLength = options.targetLength;
       if (options.maxLength) this.maxLength = options.maxLength;
       if (options.minLength) this.minLength = options.minLength;
       
-      console.log('📐 分段参数已更新:', {
+      console.log('📐 Chunking parameters updated:', {
         targetLength: this.targetLength,
         maxLength: this.maxLength,
         minLength: this.minLength
@@ -638,35 +637,35 @@ class FiveLanguageSemanticChunker {
     }
   }
   
-  // 使用示例和集成类
+  // Use example and integration class
   class FiveLanguageChunkerIntegration {
     constructor(options = {}) {
       this.chunker = new FiveLanguageSemanticChunker(options);
-      console.log('🎯 Five Language Chunker Integration 已初始化');
+      console.log('🎯 Five Language Chunker Integration initialized');
     }
   
-    // 主要接口：创建语义分段
+    // Main interface: create semantic chunks
     async createChunks(textContent) {
       try {
-        console.log('🚀 开始创建语义分段...');
+        console.log('🚀 Start creating semantic chunks...');
         const startTime = Date.now();
         
         const chunks = await this.chunker.createSemanticChunks(textContent);
         
         const endTime = Date.now();
-        console.log(`⏱️ 分段耗时: ${endTime - startTime}ms`);
+        console.log(`⏱️ Chunking time: ${endTime - startTime}ms`);
         
         return chunks;
       } catch (error) {
-        console.error('❌ 语义分段失败:', error);
-        // 回退到简单分段
+        console.error('❌ Semantic chunking failed:', error);
+        // Fallback to simple chunking
         return this.fallbackChunking(textContent);
       }
     }
   
-    // 回退分段方法
+    // Fallback chunking method
     fallbackChunking(textContent) {
-      console.log('🔄 使用回退分段方法');
+      console.log('🔄 Use fallback chunking method');
       
       const sentences = textContent
         .split(/[.!?。！？]\s*/)
@@ -694,18 +693,18 @@ class FiveLanguageSemanticChunker {
       return chunks.filter(chunk => chunk.length > 50);
     }
   
-    // 获取支持的语言
+    // Get supported languages
     getSupportedLanguages() {
       return this.chunker.getSupportedLanguages();
     }
   
-    // 设置参数
+    // Set parameters
     setParameters(options) {
       this.chunker.setChunkingParameters(options);
     }
   }
   
-  // 导出供扩展使用
+  // Export for extension use
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = { 
       FiveLanguageSemanticChunker,
@@ -713,10 +712,10 @@ class FiveLanguageSemanticChunker {
     };
   }
   
-  // 全局使用接口
+  // Global use interface
   window.createFiveLanguageChunker = function(options = {}) {
     return new FiveLanguageChunkerIntegration(options);
   };
   
-  console.log('📚 Five Language Semantic Chunker 已加载完成');
-  console.log('支持语言: 中文、English、Español、日本語、한국어');
+  console.log('📚 Five Language Semantic Chunker loaded');
+  console.log('Supported languages: Chinese, English, Spanish, Japanese, Korean');

@@ -31,7 +31,7 @@
   ],
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "Word Munch - 智能词汇简化",
+    "default_title": "Word Munch - Smart word simplification",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
