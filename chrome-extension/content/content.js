@@ -1154,6 +1154,7 @@ class ResultDisplayer {
 }
 
 // === 理解分析器 ===
+// === 优化后的理解分析器 - 大幅减少AI调用成本 ===
 class ConceptAnalyzer {
     static fillContextInformation(selectedText) {
         // 重要：在理解分析前检查扩展状态
@@ -1181,8 +1182,8 @@ class ConceptAnalyzer {
                 case 'no_context':
                     contextInfo = null;
                     break;
-                case 'auto_extract':
-                    contextInfo = 'auto_extract';
+                case 'user_only': // 新增：仅用户理解，不使用AI分析上下文
+                    contextInfo = 'user_only';
                     break;
                 default:
                     contextInfo = null;
@@ -1194,20 +1195,62 @@ class ConceptAnalyzer {
             const contextElement = state.floatingWidget?.querySelector('.concept-context-content');
             if (contextElement) {
                 if (contextInfo === null) {
-                    contextElement.textContent = '段落完整，无需上下文';
-                    contextElement.style.fontStyle = 'italic';
-                    contextElement.style.color = '#6b7280';
+                    contextElement.innerHTML = `
+                        <div style="color: #16a34a; font-style: italic;">
+                            ✅ 段落完整，无需上下文
+                        </div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+                            成本：免费
+                        </div>
+                    `;
+                } else if (contextInfo === 'user_only') {
+                    contextElement.innerHTML = `
+                        <div style="color: #8b5cf6; font-style: italic;">
+                            💭 仅基于您的理解分析
+                        </div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+                            成本：低（约${costEstimate.estimatedCost.toFixed(4)}¢）
+                        </div>
+                    `;
                 } else if (contextInfo === 'auto_extract') {
-                    contextElement.textContent = 'AI智能分析上下文';
-                    contextElement.style.fontStyle = 'italic';
-                    contextElement.style.color = '#8b5cf6';
+                    contextElement.innerHTML = `
+                        <div style="color: #f59e0b; font-weight: 500;">
+                            🤖 AI智能分析上下文
+                        </div>
+                        <div style="font-size: 12px; color: #dc2626; margin-top: 4px;">
+                            ⚠️ 成本：高（约${costEstimate.estimatedCost.toFixed(4)}¢）
+                        </div>
+                        <button class="switch-to-simple-btn" style="
+                            margin-top: 8px; 
+                            padding: 4px 8px; 
+                            background: #16a34a; 
+                            color: white; 
+                            border: none; 
+                            border-radius: 4px; 
+                            font-size: 11px;
+                            cursor: pointer;
+                        ">
+                            💰 切换到省钱模式
+                        </button>
+                    `;
                 } else {
                     const displayText = contextInfo.length > 100 
                         ? contextInfo.substring(0, 97) + '...' 
                         : contextInfo;
-                    contextElement.textContent = displayText;
-                    contextElement.style.fontStyle = 'normal';
-                    contextElement.style.color = '#374151';
+                    contextElement.innerHTML = `
+                        <div style="color: #374151;">${displayText}</div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
+                            成本：中等（约${costEstimate.estimatedCost.toFixed(4)}¢）
+                        </div>
+                    `;
+                }
+                
+                // 绑定切换按钮事件
+                const switchBtn = contextElement.querySelector('.switch-to-simple-btn');
+                if (switchBtn) {
+                    switchBtn.addEventListener('click', () => {
+                        this.switchToSimpleMode(selectedText);
+                    });
                 }
             }
             
@@ -1224,43 +1267,84 @@ class ConceptAnalyzer {
         }
     }
 
+    static switchToSimpleMode(selectedText) {
+        console.log('Word Munch: 切换到省钱模式');
+        
+        // 强制使用 user_only 模式
+        const contextStrategy = {
+            type: 'user_only',
+            reason: '用户选择省钱模式',
+            useContext: false,
+            autoExtract: false,
+            maxCost: 'very_low'
+        };
+        
+        state.currentSelection.contextStrategy = contextStrategy;
+        state.currentSelection.contextInfo = 'user_only';
+        state.currentSelection.costEstimate = this.estimateContextCost(contextStrategy, 'user_only');
+        
+        // 更新UI显示
+        const contextElement = state.floatingWidget?.querySelector('.concept-context-content');
+        if (contextElement) {
+            contextElement.innerHTML = `
+                <div style="color: #16a34a; font-style: italic;">
+                    💰 省钱模式：仅基于您的理解
+                </div>
+                <div style="font-size: 12px; color: #16a34a; margin-top: 4px;">
+                    成本：低（约${state.currentSelection.costEstimate.estimatedCost.toFixed(4)}¢）
+                </div>
+            `;
+        }
+    }
+
     static determineContextStrategy(selectedText) {
         const wordCount = selectedText.split(/\s+/).length;
         
+        // 大幅优化：默认都使用更省钱的策略
         if (wordCount <= 5) {
             return {
-                type: 'full_context',
-                reason: '单词需要上下文',
-                useContext: true,
-                autoExtract: false,
-                maxCost: 'low'
-            };
-        }
-        
-        if (wordCount >= 6 && wordCount <= 15) {
-            return {
-                type: 'minimal_context',
-                reason: '短语需要基础上下文',
-                useContext: true,
+                type: 'user_only', // 改为仅用户理解，不分析上下文
+                reason: '单词无需上下文分析',
+                useContext: false,
                 autoExtract: false,
                 maxCost: 'very_low'
             };
         }
         
-        if (wordCount >= 16 && wordCount <= 40) {
+        if (wordCount >= 6 && wordCount <= 15) {
             return {
-                type: 'auto_extract',
-                reason: '句子让AI自动分析',
+                type: 'user_only', // 改为仅用户理解
+                reason: '短语基于用户理解即可',
                 useContext: false,
-                autoExtract: true,
+                autoExtract: false,
+                maxCost: 'very_low'
+            };
+        }
+        
+        if (wordCount >= 16 && wordCount <= 30) {
+            return {
+                type: 'user_only', // 改为仅用户理解
+                reason: '短句基于用户理解即可',
+                useContext: false,
+                autoExtract: false,
+                maxCost: 'low'
+            };
+        }
+        
+        if (wordCount >= 31 && wordCount <= 50) {
+            return {
+                type: 'minimal_context', // 中等长度才考虑最小上下文
+                reason: '中等段落需要基础上下文',
+                useContext: true,
+                autoExtract: false,
                 maxCost: 'medium'
             };
         }
         
-        if (wordCount > 40) {
+        if (wordCount > 50) {
             return {
-                type: 'no_context',
-                reason: '段落无需额外上下文',
+                type: 'no_context', // 长段落无需上下文
+                reason: '长段落无需额外上下文',
                 useContext: false,
                 autoExtract: false,
                 maxCost: 'none'
@@ -1268,41 +1352,102 @@ class ConceptAnalyzer {
         }
         
         return {
-            type: 'no_context',
-            reason: '默认无上下文',
+            type: 'user_only', // 默认使用最省钱的模式
+            reason: '默认省钱模式',
             useContext: false,
             autoExtract: false,
-            maxCost: 'none'
+            maxCost: 'very_low'
         };
     }
 
     static extractFullContext(selectedText) {
-        // 实现上下文提取逻辑
-        return null; // 简化实现
+        // 实现简单的上下文提取，避免复杂计算
+        if (!state.currentSelection || !state.currentSelection.range) {
+            return null;
+        }
+        
+        try {
+            const range = state.currentSelection.range;
+            const container = range.commonAncestorContainer;
+            
+            let textContent = '';
+            if (container.nodeType === Node.TEXT_NODE) {
+                textContent = container.parentElement ? container.parentElement.textContent : '';
+            } else {
+                textContent = container.textContent || '';
+            }
+            
+            const selectedIndex = textContent.indexOf(selectedText);
+            if (selectedIndex === -1) return null;
+            
+            // 限制上下文长度，控制成本
+            const contextLength = 80; // 大幅减少从之前的100-200
+            const beforeContext = textContent.substring(Math.max(0, selectedIndex - contextLength), selectedIndex);
+            const afterContext = textContent.substring(selectedIndex + selectedText.length, selectedIndex + selectedText.length + contextLength);
+            
+            const fullContext = (beforeContext + selectedText + afterContext).trim();
+            
+            // 如果上下文和原文差不多，就不用上下文
+            if (fullContext.length - selectedText.length < 50) {
+                return null;
+            }
+            
+            return fullContext;
+        } catch (error) {
+            console.error('Word Munch: 提取上下文失败:', error);
+            return null;
+        }
     }
 
     static extractMinimalContext(selectedText) {
-        // 实现最小上下文提取逻辑
-        return null; // 简化实现
+        const fullContext = this.extractFullContext(selectedText);
+        if (!fullContext) return null;
+        
+        // 进一步压缩上下文，只保留最关键的部分
+        const maxContextLength = 120; // 进一步减少
+        if (fullContext.length <= maxContextLength) {
+            return fullContext;
+        }
+        
+        // 智能截取：保留句子完整性
+        const shortened = fullContext.substring(0, maxContextLength);
+        const lastSentenceEnd = Math.max(
+            shortened.lastIndexOf('。'),
+            shortened.lastIndexOf('.'),
+            shortened.lastIndexOf('!'),
+            shortened.lastIndexOf('?')
+        );
+        
+        if (lastSentenceEnd > maxContextLength / 2) {
+            return shortened.substring(0, lastSentenceEnd + 1);
+        }
+        
+        return shortened + '...';
     }
 
     static estimateContextCost(contextStrategy, contextText) {
-        let estimatedTokens = 50; // 基础prompt
-        estimatedTokens += 20; // 用户理解
-        estimatedTokens += Math.ceil(state.currentSelection?.text?.length / 4) || 0;
+        let estimatedTokens = 30; // 减少基础prompt成本
+        estimatedTokens += 15; // 减少用户理解成本
+        estimatedTokens += Math.ceil((state.currentSelection?.text?.length || 0) / 4);
         
-        if (contextText) {
+        if (contextText && contextText !== 'user_only') {
             estimatedTokens += Math.ceil(contextText.length / 4);
         }
         
+        // 大幅减少AI分析成本
         if (contextStrategy.autoExtract) {
-            estimatedTokens += 30;
+            estimatedTokens += 50; // 从30增加到50，但实际很少使用
         }
+        
+        // 更精确的成本计算
+        const costPerToken = 0.0000025; // 更精确的每token成本
         
         return {
             estimatedTokens,
-            estimatedCost: estimatedTokens * 0.00025,
-            level: estimatedTokens < 100 ? 'low' : estimatedTokens < 200 ? 'medium' : 'high'
+            estimatedCost: estimatedTokens * costPerToken,
+            level: estimatedTokens < 50 ? 'very_low' : 
+                   estimatedTokens < 100 ? 'low' : 
+                   estimatedTokens < 200 ? 'medium' : 'high'
         };
     }
 
@@ -1330,13 +1475,28 @@ class ConceptAnalyzer {
             return;
         }
         
+        // 成本确认机制
+        const costEstimate = state.currentSelection.costEstimate || { estimatedCost: 0.001 };
+        const costInCents = costEstimate.estimatedCost * 100;
+        
+        if (costInCents > 0.5) { // 超过0.5分钱就提醒
+            const confirmMessage = `本次分析预计花费约 ${costInCents.toFixed(2)} 分钱，是否继续？\n\n💡 提示：您可以点击"切换到省钱模式"来降低成本。`;
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+        }
+        
         try {
             analyzeBtn.disabled = true;
             loadingElement.style.display = 'block';
             resultsElement.style.display = 'none';
             errorElement.style.display = 'none';
             
-            const contextStrategy = state.currentSelection.contextStrategy || { type: 'minimal_context', useContext: true, autoExtract: false };
+            const contextStrategy = state.currentSelection.contextStrategy || { 
+                type: 'user_only', 
+                useContext: false, 
+                autoExtract: false 
+            };
             
             let finalContext = null;
             let autoExtractContext = false;
@@ -1348,6 +1508,7 @@ class ConceptAnalyzer {
                     autoExtractContext = false;
                     break;
                 case 'no_context':
+                case 'user_only': // 新增
                     finalContext = null;
                     autoExtractContext = false;
                     break;
@@ -1370,12 +1531,17 @@ class ConceptAnalyzer {
 
     static sendConceptAnalysisMessage(originalText, userUnderstanding, context, autoExtractContext) {
         const messageId = Math.random().toString(36).substr(2, 9);
+        
+        // 添加成本控制标记
+        const costLevel = state.currentSelection.costEstimate?.level || 'low';
+        
         const message = {
             type: 'CONCEPT_ANALYSIS',
             original_text: originalText,
             user_understanding: userUnderstanding,
             context: context,
             auto_extract_context: autoExtractContext,
+            cost_level: costLevel, // 传递成本级别给background
             url: window.location.href,
             title: document.title,
             messageId: messageId,
@@ -1383,7 +1549,7 @@ class ConceptAnalyzer {
             cache_key: this.generateConceptCacheKey(originalText, userUnderstanding, context)
         };
         
-        console.log('Word Munch: 发送理解分析消息到 background:', messageId);
+        console.log('Word Munch: 发送理解分析消息到 background:', messageId, '成本级别:', costLevel);
         
         try {
             chrome.runtime.sendMessage(message, (response) => {
@@ -1455,6 +1621,17 @@ class ConceptAnalyzer {
                 }
             }, 3000);
         }
+        
+        // 重新启用按钮
+        const analyzeBtn = widget.querySelector('.concept-analyze-btn');
+        if (analyzeBtn) {
+            analyzeBtn.disabled = false;
+        }
+        
+        const loadingElement = widget.querySelector('.concept-loading');
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
     }
 
     static displayConceptResults(analysis) {
@@ -1467,7 +1644,27 @@ class ConceptAnalyzer {
         const scorePercentage = Math.round(analysis.overall_similarity * 100);
         const stats = analysis.analysis_stats;
         
+        // 显示实际花费
+        const actualCost = analysis.actual_cost || state.currentSelection.costEstimate?.estimatedCost || 0;
+        const actualCostCents = actualCost * 100;
+        
         const resultsHTML = `
+            <div class="concept-cost-info" style="
+                background: #f0fdf4; 
+                border: 1px solid #bbf7d0; 
+                border-radius: 6px; 
+                padding: 8px; 
+                margin-bottom: 12px;
+                font-size: 12px;
+            ">
+                <div style="color: #16a34a; font-weight: 500;">
+                    💰 本次分析花费：${actualCostCents.toFixed(3)} 分钱
+                </div>
+                <div style="color: #6b7280;">
+                    Token消耗：${analysis.token_usage || '未知'}
+                </div>
+            </div>
+            
             <div class="concept-score-section">
                 <div class="concept-score-card">
                     <div class="concept-score-value">${scorePercentage}%</div>
