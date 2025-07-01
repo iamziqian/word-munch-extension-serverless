@@ -1,12 +1,8 @@
-import API_CONFIG from '../config/config';
-
-console.log('=== Service Worker: Start ===');
-
 // === Configuration constants ===
-const CONFIG = {
-    WORD_API_ENDPOINT: API_CONFIG.WORD_API_ENDPOINT,
-    CONCEPT_API_ENDPOINT: API_CONFIG.CONCEPT_API_ENDPOINT,
-    COGNITIVE_API_ENDPOINT: API_CONFIG.COGNITIVE_API_ENDPOINT,
+let CONFIG = {
+    WORD_API_ENDPOINT: '', // Will be loaded from config.js
+    CONCEPT_API_ENDPOINT: '',
+    COGNITIVE_API_ENDPOINT: '',
     MEMORY_CACHE_TIME: 3000,
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000,
     DB_NAME: 'WordMunchCache',
@@ -14,18 +10,66 @@ const CONFIG = {
     STORE_NAME: 'simplifiedResults'
 };
 
-// Load API configuration from localStorage if available
-try {
-    const storedConfig = localStorage.getItem('wordMunchAPIConfig');
-    if (storedConfig) {
-        const apiConfig = JSON.parse(storedConfig);
-        CONFIG.WORD_API_ENDPOINT = apiConfig.WORD_API_ENDPOINT || CONFIG.WORD_API_ENDPOINT;
-        CONFIG.CONCEPT_API_ENDPOINT = apiConfig.CONCEPT_API_ENDPOINT || CONFIG.CONCEPT_API_ENDPOINT;
-        CONFIG.COGNITIVE_API_ENDPOINT = apiConfig.COGNITIVE_API_ENDPOINT || CONFIG.COGNITIVE_API_ENDPOINT;
+async function loadAPIConfig() {
+    console.log('🔧 Service Worker: Loading API config from config.js');
+    
+    try {
+        // Load config from config.js file
+        const response = await fetch(chrome.runtime.getURL('config/config.js'));
+        const configText = await response.text();
+        
+        // Extract API endpoints using regex
+        const wordMatch = configText.match(/WORD_API_ENDPOINT:\s*'([^']+)'/);
+        const conceptMatch = configText.match(/CONCEPT_API_ENDPOINT:\s*'([^']+)'/);
+        const cognitiveMatch = configText.match(/COGNITIVE_API_ENDPOINT:\s*'([^']+)'/);
+        
+        if (wordMatch) CONFIG.WORD_API_ENDPOINT = wordMatch[1];
+        if (conceptMatch) CONFIG.CONCEPT_API_ENDPOINT = conceptMatch[1];
+        if (cognitiveMatch) CONFIG.COGNITIVE_API_ENDPOINT = cognitiveMatch[1];
+        
+        console.log('✅ Service Worker: API config loaded from config.js:');
+        console.log('🔗 WORD_API_ENDPOINT:', CONFIG.WORD_API_ENDPOINT);
+        console.log('🔗 CONCEPT_API_ENDPOINT:', CONFIG.CONCEPT_API_ENDPOINT);
+        console.log('🔗 COGNITIVE_API_ENDPOINT:', CONFIG.COGNITIVE_API_ENDPOINT);
+        
+        // Save to storage for content script use
+        await chrome.storage.sync.set({
+            apiConfig: {
+                WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
+                CONCEPT_API_ENDPOINT: CONFIG.CONCEPT_API_ENDPOINT,
+                COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT
+            }
+        });
+        console.log('📦 Service Worker: API config saved to storage');
+        
+    } catch (error) {
+        console.error('Service Worker: Failed to load config from config.js:', error);
+        
+        // Fallback: try to load from storage
+        try {
+            const result = await chrome.storage.sync.get(['apiConfig']);
+            if (result.apiConfig) {
+                CONFIG.WORD_API_ENDPOINT = result.apiConfig.WORD_API_ENDPOINT || '';
+                CONFIG.CONCEPT_API_ENDPOINT = result.apiConfig.CONCEPT_API_ENDPOINT || '';
+                CONFIG.COGNITIVE_API_ENDPOINT = result.apiConfig.COGNITIVE_API_ENDPOINT || '';
+                console.log('📦 Service Worker: Fallback - loaded from storage');
+            }
+        } catch (storageError) {
+            console.error('Service Worker: Failed to load from storage:', storageError);
+        }
     }
-} catch (error) {
-    console.warn('Failed to load API config from localStorage:', error);
 }
+
+// Initialize API config on startup
+loadAPIConfig();
+
+// Listen for config reload messages
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'RELOAD_API_CONFIG') {
+        loadAPIConfig();
+        console.log('Service Worker: API config reloaded');
+    }
+});
 
 // === Global state management ===
 class ServiceWorkerState {
@@ -390,7 +434,40 @@ class MessageRouter {
         
         try {
             switch (request.type) {
+                case 'GET_CONFIG':
+                    console.log('📤 Service Worker: Sending config to content script');
+                    
+                    const configResponse = {
+                        CONCEPT_API_ENDPOINT: CONFIG.CONCEPT_API_ENDPOINT,
+                        WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
+                        COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT,
+                        success: true
+                    };
+                    
+                    console.log('📋 Service Worker: Config response:', configResponse);
+                    
+                    if (sendResponse) {
+                        sendResponse(configResponse);
+                    }
+                    
+                    // Also send to content script
+                    if (sender.tab?.id) {
+                        try {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'CONFIG_LOADED',
+                                config: configResponse
+                            });
+                            console.log('📤 Service Worker: Config also sent via message');
+                        } catch (error) {
+                            console.log('Service Worker: Could not send config message:', error.message);
+                        }
+                    }
+                    break;
+
                 case 'WORD_SELECTED':
+                    await WordProcessor.handleWordSelection(request, sender);
+                    break;
+
                 case 'SENTENCE_SELECTED':
                     await WordProcessor.handleWordSelection(request, sender);
                     break;
@@ -731,14 +808,32 @@ class ConceptProcessor {
 // === API manager ===
 class APIManager {
     static async callWordAPI(word, context, language) {
-        console.log('Service Worker: Call word API:', { word: word.substring(0, 20) });
+        console.log('🚀 Service Worker: Word API call started');
+        console.log('   📝 Word:', word);
+        console.log('   🌐 Language:', language);
+        console.log('   🔗 Endpoint:', CONFIG.WORD_API_ENDPOINT);
+        console.log('   📏 Endpoint length:', CONFIG.WORD_API_ENDPOINT?.length || 0);
+        console.log('   ✅ Endpoint valid:', !!CONFIG.WORD_API_ENDPOINT && CONFIG.WORD_API_ENDPOINT !== 'https://your-api-domain.com/word-muncher');
+        
+        // 检查端点
+        if (!CONFIG.WORD_API_ENDPOINT) {
+            console.log('❌ Word API endpoint is empty!');
+            throw new Error('Word API endpoint not configured');
+        }
+        
+        if (CONFIG.WORD_API_ENDPOINT === 'https://your-api-domain.com/word-muncher') {
+            console.log('⚠️ Word API endpoint is still default placeholder!');
+            throw new Error('Word API endpoint is placeholder');
+        }
         
         const requestBody = {
             word: word,
             context: context,
             language: language
         };
-
+        
+        console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
+        
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -746,29 +841,71 @@ class APIManager {
         const authToken = await UserManager.getAuthToken();
         if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;
+            console.log('🔐 Auth token added (length:', authToken.length, ')');
+        } else {
+            console.log('🔓 No auth token');
         }
         
-        const response = await fetch(CONFIG.WORD_API_ENDPOINT, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody)
-        });
+        console.log('📋 Request headers:', headers);
         
-        console.log('Service Worker: API response status:', response.status);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API request failed ${response.status}: ${errorText}`);
+        try {
+            console.log('🌐 Making fetch request to:', CONFIG.WORD_API_ENDPOINT);
+            const response = await fetch(CONFIG.WORD_API_ENDPOINT, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
+            });
+            
+            console.log('📈 Response status:', response.status);
+            console.log('📈 Response ok:', response.ok);
+            console.log('📈 Response headers:', Object.fromEntries(response.headers.entries()));
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log('❌ Error response text:', errorText);
+                throw new Error(`API request failed ${response.status}: ${errorText}`);
+            }
+            
+            const responseText = await response.text();
+            console.log('📥 Raw response (first 200 chars):', responseText.substring(0, 200));
+            console.log('📏 Response length:', responseText.length);
+            
+            try {
+                const result = JSON.parse(responseText);
+                console.log('✅ JSON parsed successfully');
+                console.log('📊 Result structure:', Object.keys(result));
+                console.log('🎯 Synonyms count:', result.synonyms?.length || 0);
+                return result;
+            } catch (parseError) {
+                console.log('💥 JSON parse error:', parseError.message);
+                console.log('📝 Problematic text:', responseText);
+                throw parseError;
+            }
+            
+        } catch (fetchError) {
+            console.log('💥 Fetch error:', fetchError.message);
+            console.log('🔍 Error type:', fetchError.constructor.name);
+            throw fetchError;
         }
-        
-        const result = await response.json();
-        console.log('Service Worker: API successful response');
-        
-        return result;
     }
 
     static async callConceptAPI(original_text, user_understanding, context, auto_extract_context) {
-        console.log('Service Worker: Call concept analysis API');
+        console.log('🧠 Service Worker: Concept API call started');
+        console.log('   📝 Original text length:', original_text?.length || 0);
+        console.log('   💭 Understanding length:', user_understanding?.length || 0);
+        console.log('   🔗 Endpoint:', CONFIG.CONCEPT_API_ENDPOINT);
+        console.log('   ✅ Endpoint valid:', !!CONFIG.CONCEPT_API_ENDPOINT && CONFIG.CONCEPT_API_ENDPOINT !== 'https://your-api-domain.com/concept-muncher');
+        
+        // 检查端点
+        if (!CONFIG.CONCEPT_API_ENDPOINT) {
+            console.log('❌ Concept API endpoint is empty!');
+            throw new Error('Concept API endpoint not configured');
+        }
+        
+        if (CONFIG.CONCEPT_API_ENDPOINT === 'https://your-api-domain.com/concept-muncher') {
+            console.log('⚠️ Concept API endpoint is still default placeholder!');
+            throw new Error('Concept API endpoint is placeholder');
+        }
         
         const requestBody = {
             original_text: original_text,
@@ -776,7 +913,9 @@ class APIManager {
             context: context,
             auto_extract_context: auto_extract_context || false
         };
-
+        
+        console.log('📤 Concept request body keys:', Object.keys(requestBody));
+        
         const headers = {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -786,27 +925,46 @@ class APIManager {
         const authToken = await UserManager.getAuthToken();
         if (authToken) {
             headers['Authorization'] = `Bearer ${authToken}`;
+            console.log('🔐 Concept auth token added');
         }
         
-        const response = await fetch(CONFIG.CONCEPT_API_ENDPOINT, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody),
-            cache: 'no-cache'
-        });
-        
-        console.log('Service Worker: Concept analysis API response status:', response.status);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Service Worker: API error response:', errorText);
-            throw new Error(`Concept analysis API request failed ${response.status}: ${errorText}`);
+        try {
+            console.log('🌐 Making concept fetch request...');
+            const response = await fetch(CONFIG.CONCEPT_API_ENDPOINT, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody),
+                cache: 'no-cache'
+            });
+            
+            console.log('📈 Concept response status:', response.status);
+            console.log('📈 Concept response ok:', response.ok);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log('❌ Concept error response:', errorText);
+                throw new Error(`Concept analysis API request failed ${response.status}: ${errorText}`);
+            }
+            
+            const responseText = await response.text();
+            console.log('📥 Concept raw response (first 200 chars):', responseText.substring(0, 200));
+            
+            try {
+                const result = JSON.parse(responseText);
+                console.log('✅ Concept JSON parsed successfully');
+                console.log('📊 Concept result keys:', Object.keys(result));
+                console.log('🎯 Similarity score:', result.overall_similarity);
+                return result;
+            } catch (parseError) {
+                console.log('💥 Concept JSON parse error:', parseError.message);
+                console.log('📝 Concept problematic text:', responseText);
+                throw parseError;
+            }
+            
+        } catch (fetchError) {
+            console.log('💥 Concept fetch error:', fetchError.message);
+            throw fetchError;
         }
-        
-        const result = await response.json();
-        console.log('Service Worker: Concept analysis API successful response, similarity:', result.overall_similarity);
-        
-        return result;
     }
 }
 
@@ -1475,9 +1633,13 @@ class TabManager {
     }
 }
 
-chrome.runtime.onInstalled.addListener((details) => {
-    console.log('=== Service Worker: Extension installed ===', details.reason);
-    LifecycleManager.initialize();
+chrome.runtime.onInstalled.addListener(async (details) => {
+    console.log('Service Worker: Extension installed/updated:', details.reason);
+    
+    await loadAPIConfig();
+    await LifecycleManager.initialize();
+    
+    console.log('Service Worker: Initialization complete with AWS API endpoints');
 });
 
 chrome.runtime.onStartup.addListener(() => {
