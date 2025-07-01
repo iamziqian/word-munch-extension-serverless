@@ -30,7 +30,7 @@ Select any difficult word, get an instant simplified synonym in a floating windo
 ### Concept Muncher
 This is where it gets interesting. Select a complex sentence or paragraph, then write your own understanding in one sentence. Our system uses Amazon Titan Text Embeddings to compare your interpretation with the original meaning.
 
-Here's the magic: the original text lights up with color-coded highlights showing exactly what you understood (green), partially grasped (yellow), or completely missed (no highlight). It's like having X-ray vision for your own comprehension gaps.
+Here's the magic: the original text lights up with color-coded highlights showing exactly what you understood (green), partially grasped (yellow), or completely missed (red). It's like having X-ray vision for your own comprehension gaps.
 
 When you're struggling, Claude Haiku steps in with personalized feedback—not just "you got it wrong," but actionable advice like "try identifying the author's stance on this issue."
 
