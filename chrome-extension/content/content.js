@@ -1,11 +1,48 @@
-import API_CONFIG from '../config/config';
-
-// === Configuration Constants ===
-const CONFIG = {
-    CONCEPT_API_ENDPOINT: API_CONFIG.CONCEPT_API_ENDPOINT,
+let CONFIG = {
+    CONCEPT_API_ENDPOINT: '', // Will be loaded from storage
     MIN_WORDS_FOR_CONCEPT: 6,
     MEMORY_CACHE_TIME: 3000
 };
+
+async function loadConfig() {
+    console.log('🔧 Word Munch: Content script loading config...');
+    
+    try {
+        const result = await chrome.storage.sync.get(['apiConfig']);
+        
+        if (result.apiConfig && result.apiConfig.CONCEPT_API_ENDPOINT) {
+            CONFIG.CONCEPT_API_ENDPOINT = result.apiConfig.CONCEPT_API_ENDPOINT;
+            console.log('✅ Word Munch: Content config loaded from storage!');
+            
+            // Check if it's still a placeholder
+            if (CONFIG.CONCEPT_API_ENDPOINT.includes('your-api-domain.com')) {
+                console.log('⚠️ Word Munch: API endpoint is still a placeholder');
+            } else {
+                console.log('✅ Word Munch: API endpoint looks correct');
+            }
+        } else {
+            console.log('❌ Word Munch: No API config found in content script storage');
+            
+            // If storage is empty, try to get from background script
+            console.log('🔄 Word Munch: Requesting config from background...');
+            try {
+                chrome.runtime.sendMessage({type: 'GET_CONFIG'}, (response) => {
+                    if (response && response.CONCEPT_API_ENDPOINT) {
+                        CONFIG.CONCEPT_API_ENDPOINT = response.CONCEPT_API_ENDPOINT;
+                        console.log('✅ Word Munch: Config received from background');
+                    }
+                });
+            } catch (error) {
+                console.warn('Word Munch: Failed to get config from background:', error);
+            }
+        }
+    } catch (error) {
+        console.error('Word Munch: Failed to load config:', error);
+    }
+    
+    console.log('📊 Word Munch: Final content config check:');
+    console.log('   - CONCEPT_API:', CONFIG.CONCEPT_API_ENDPOINT ? '✅ SET' : '❌ EMPTY');
+}
 
 // === Global State Management ===
 class ContentScriptState {
@@ -2123,31 +2160,32 @@ const eventManager = new EventManager();
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Word Munch: Content script loaded');
     
-    // First load settings
+    // Simple delay to give extension time to initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await loadConfig();
     await state.loadSettings();
     
-    // Notify background script content script is ready
     APIManager.sendMessageToBackground({
         type: 'CONTENT_SCRIPT_READY',
         url: window.location.href
     });
 
-    // Add at the main entry of content script:
     ResultDisplayer.initializeStyles();
 });
 
 if (document.readyState !== 'loading') {
     console.log('Word Munch: Content script loaded (page already complete)');
     
-    // Immediately load settings
-    state.loadSettings().then(() => {
-        setTimeout(() => {
-            APIManager.sendMessageToBackground({
-                type: 'CONTENT_SCRIPT_READY',
-                url: window.location.href
-            });
-        }, 100);
-    });
+    setTimeout(async () => {
+        await loadConfig();
+        await state.loadSettings();
+        
+        APIManager.sendMessageToBackground({
+            type: 'CONTENT_SCRIPT_READY',
+            url: window.location.href
+        });
+    }, 1000); // Give more time for extension to prepare
 }
 
 // Error handling
