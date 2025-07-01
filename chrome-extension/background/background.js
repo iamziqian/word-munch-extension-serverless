@@ -114,15 +114,37 @@ class CognitiveProfileManager {
             }
     
             console.log('Background: Sending dashboard message to tab:', tabId, 'for user:', userInfo.userId);
+
+            // === New: Retry mechanism ===
+            const maxRetries = 3;
+            let retryCount = 0;
             
-            // Send message to content script to show dashboard
-            await chrome.tabs.sendMessage(tabId, {
-                type: 'SHOW_COGNITIVE_DASHBOARD',
-                userId: userInfo.userId || userInfo.email,
-                isAnonymous: userInfo.isAnonymous || false
-            });
-            
-            console.log('Background: Dashboard message sent successfully');
+            const sendMessageWithRetry = async () => {
+                try {
+                    await chrome.tabs.sendMessage(tabId, {
+                        type: 'SHOW_COGNITIVE_DASHBOARD',
+                        userId: userInfo.userId || userInfo.email,
+                        isAnonymous: userInfo.isAnonymous || false
+                    });
+                    console.log('Background: Dashboard message sent successfully');
+                    return true;
+                } catch (error) {
+                    console.warn(`Background: Message send attempt ${retryCount + 1} failed:`, error.message);
+                    
+                    if (retryCount < maxRetries && error.message.includes('Could not establish connection')) {
+                        retryCount++;
+                        console.log(`Background: Retrying in ${retryCount * 500}ms...`);
+                        
+                        // Wait for a while and retry
+                        await new Promise(resolve => setTimeout(resolve, retryCount * 500));
+                        return sendMessageWithRetry();
+                    }
+                    
+                    throw error;
+                }
+            };
+
+            await sendMessageWithRetry();
     
         } catch (error) {
             console.error('Background: Failed to show cognitive dashboard:', error);

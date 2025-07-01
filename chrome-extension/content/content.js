@@ -313,29 +313,39 @@ class EventManager {
                     MessageHandlers.handleSettingsUpdated(message.settings);
                     break;
 
-                case 'SHOW_COGNITIVE_DASHBOARD':
-                    console.log('Word Munch: Show cognitive dashboard for user:', message.userId);
-                    console.log('Word Munch: Is anonymous:', message.isAnonymous);
-                    
-                    // Ensure dashboard object exists
-                    if (typeof cognitiveDashboard === 'undefined') {
-                        console.error('Word Munch: cognitiveDashboard not defined');
-                        sendResponse({ error: 'Dashboard not initialized' });
-                        return;
-                    }
-                    
-                    // Delay execution, ensure DOM ready
-                    setTimeout(() => {
-                        try {
-                            cognitiveDashboard.showDashboard(message.userId, message.isAnonymous);
-                            console.log('Word Munch: Dashboard show method called');
-                        } catch (dashboardError) {
-                            console.error('Word Munch: Dashboard show failed:', dashboardError);
-                        }
-                    }, 100);
-                    
-                    sendResponse({ success: true });
-                    break;
+                    case 'SHOW_COGNITIVE_DASHBOARD':
+                        console.log('Word Munch: Show cognitive dashboard for user:', message.userId);
+                        console.log('Word Munch: Is anonymous:', message.isAnonymous);
+                        
+                        // New waiting mechanism
+                        const waitForDashboard = (attempts = 0) => {
+                            if (typeof window.cognitiveDashboard !== 'undefined' && window.cognitiveDashboard.showDashboard) {
+                                console.log('Word Munch: Found cognitiveDashboard, showing dashboard...');
+                                try {
+                                    window.cognitiveDashboard.showDashboard(message.userId, message.isAnonymous);
+                                    console.log('Word Munch: Dashboard show method called successfully');
+                                    sendResponse({ success: true });
+                                } catch (dashboardError) {
+                                    console.error('Word Munch: Dashboard show failed:', dashboardError);
+                                    sendResponse({ error: dashboardError.message });
+                                }
+                            } else if (attempts < 10) {
+                                console.log(`Word Munch: Waiting for cognitiveDashboard... attempt ${attempts + 1}/10`);
+                                setTimeout(() => waitForDashboard(attempts + 1), 200);
+                            } else {
+                                console.error('Word Munch: CognitiveDashboard not found after 2 seconds');
+                                sendResponse({ 
+                                    error: 'Dashboard not ready',
+                                    suggestion: 'Please refresh the page and try again'
+                                });
+                            }
+                        };
+                        
+                        // Start waiting immediately
+                        waitForDashboard();
+                        
+                        // return true to keep message channel open
+                        return true;
                     
                 case 'COGNITIVE_PROFILE_DATA':
                     console.log('Word Munch: Received cognitive profile data');
