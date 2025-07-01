@@ -1,8 +1,8 @@
-// ========== Word Munch Content Script ==========
+import API_CONFIG from '../config/config';
 
 // === Configuration Constants ===
 const CONFIG = {
-    CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
+    CONCEPT_API_ENDPOINT: API_CONFIG.CONCEPT_API_ENDPOINT,
     MIN_WORDS_FOR_CONCEPT: 6,
     MEMORY_CACHE_TIME: 3000
 };

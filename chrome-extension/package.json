@@ -1,0 +1,11 @@
+{
+  "name": "word-munch-extension",
+  "version": "1.0.0",
+  "description": "Word Munch Chrome Extension",
+  "scripts": {
+    "build": "node build-manifest.js",
+    "dev": "node build-manifest.js && echo 'Extension built successfully!'"
+  },
+  "devDependencies": {},
+  "private": true
+} 

@@ -9,8 +9,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# API URL
-API_URL="https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher"
+# API URL - Replace with your actual API endpoint
+API_URL="${CONCEPT_API_URL:-https://your-api-gateway.amazonaws.com/dev/concept-muncher}"
 
 # Log file
 LOG_FILE="test_results_$(date +%Y%m%d_%H%M%S).log"

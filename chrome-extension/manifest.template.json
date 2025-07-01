@@ -13,7 +13,7 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/*"
+    "https://your-api-gateway.amazonaws.com/*"
   ],
   "background": {
     "service_worker": "background/background.js"
@@ -46,4 +46,4 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }
-}  
+} 

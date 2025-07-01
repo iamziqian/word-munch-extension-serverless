@@ -5,8 +5,23 @@ Chrome Extension Backend Infrastructure
 """
 
 import os
+from pathlib import Path
 from aws_cdk import App, Environment
 from word_munch_stack import WordMunchStack
+
+# Load environment variables from .env file
+def load_env_file():
+    env_file = Path(__file__).parent / '.env'
+    if env_file.exists():
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
+# Load .env file
+load_env_file()
 
 app = App()
 
@@ -14,7 +29,7 @@ app = App()
 environment = os.getenv('ENVIRONMENT', 'dev')
 project_name = os.getenv('PROJECT_NAME', 'word-munch')
 aws_region = os.getenv('AWS_REGION', 'us-east-1')
-aws_account = os.getenv('AWS_ACCOUNT_ID', '302263048692')  # 使用实际的AWS账户ID
+aws_account = os.getenv('AWS_ACCOUNT_ID', 'YOUR_AWS_ACCOUNT_ID_HERE')  # Please replace it with your AWS account ID.
 
 # Create aws environment
 aws_env = Environment(

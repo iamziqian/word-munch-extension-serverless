@@ -1,0 +1,71 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+*.env
+
+# Configuration files with secrets
+config/secrets.json
+config/local.json
+secrets.json
+local.json
+
+# Chrome extension API configuration
+chrome-extension/config/api-config.js
+chrome-extension/config/api-config.local.js
+chrome-extension/config/config.js
+chrome-extension/manifest.json
+
+# AWS credentials
+.aws/
+aws-credentials.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Node modules (if any)
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# CDK
+cdk.out/ 

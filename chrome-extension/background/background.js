@@ -1,18 +1,31 @@
-// ========== Chrome Extension Service Worker - Refactored version ==========
+import API_CONFIG from '../config/config';
 
 console.log('=== Service Worker: Start ===');
 
 // === Configuration constants ===
 const CONFIG = {
-    WORD_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/word-muncher',
-    CONCEPT_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/concept-muncher',
-    COGNITIVE_API_ENDPOINT: 'https://4gjsn9p4kc.execute-api.us-east-1.amazonaws.com/dev/cognitive-profile',
+    WORD_API_ENDPOINT: API_CONFIG.WORD_API_ENDPOINT,
+    CONCEPT_API_ENDPOINT: API_CONFIG.CONCEPT_API_ENDPOINT,
+    COGNITIVE_API_ENDPOINT: API_CONFIG.COGNITIVE_API_ENDPOINT,
     MEMORY_CACHE_TIME: 3000,
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000,
     DB_NAME: 'WordMunchCache',
     DB_VERSION: 1,
     STORE_NAME: 'simplifiedResults'
 };
+
+// Load API configuration from localStorage if available
+try {
+    const storedConfig = localStorage.getItem('wordMunchAPIConfig');
+    if (storedConfig) {
+        const apiConfig = JSON.parse(storedConfig);
+        CONFIG.WORD_API_ENDPOINT = apiConfig.WORD_API_ENDPOINT || CONFIG.WORD_API_ENDPOINT;
+        CONFIG.CONCEPT_API_ENDPOINT = apiConfig.CONCEPT_API_ENDPOINT || CONFIG.CONCEPT_API_ENDPOINT;
+        CONFIG.COGNITIVE_API_ENDPOINT = apiConfig.COGNITIVE_API_ENDPOINT || CONFIG.COGNITIVE_API_ENDPOINT;
+    }
+} catch (error) {
+    console.warn('Failed to load API config from localStorage:', error);
+}
 
 // === Global state management ===
 class ServiceWorkerState {
