@@ -69,7 +69,7 @@ def cache_result(key: str, data: Dict[str, Any]) -> bool:
             'timestamp': now,
             'ttl': ttl,
             'provider': 'bedrock',
-            'model': 'meta.llama3-8b-instruct-v1:0',
+            'model': 'amazon.nova-micro-v1:0',
             'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         }
         
@@ -180,78 +180,46 @@ def lambda_handler(event, context):
 
 def generate_synonyms(word, context, language):
     """
-    Generate progressive synonyms for a given word using Bedrock with context
+    Generate progressive synonyms for a given word using Amazon Nova Micro with context
     """
     client = boto3.client("bedrock-runtime", region_name="us-east-1")
     
-    # Using Llama 3 8B model for word simplification
-    model_id = "meta.llama3-8b-instruct-v1:0"
+    # Using Amazon Nova Micro model for word simplification
+    model_id = "amazon.nova-micro-v1:0"
     logger.info(f"Using model: {model_id} for word: {word} with context: {context} in {language}")
     
     # Build context-aware prompts - language parameter determines output language
     if context:
-        prompt = f"""
-        Generate 5 progressive synonyms for the word, from complex to simple.
+        prompt = f"""Word: "{word}"
+Context: "{context}"
 
-        Word: "{word}"
-        Context: "{context}"
-
-        Requirements:
-        1. Return only JSON array format, no explanations
-        2. 5 synonyms progressing from complex to simple
-        3. Each synonym should be a single word, no definitions
-        4. Must fit the context
-        5. Output language: {language.upper()}
-
-        Format example: ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"]
-
-        Now generate synonyms for "{word}" in {language.upper()}:
-        """
+Generate 5 synonyms from simple to very simple and common. Must fit the context. Output language: {language.upper()}.
+Return only JSON array: ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"]"""
     else:
-        prompt = f"""
-        Generate 5 progressive synonyms for the word, from complex to simple.
+        prompt = f"""Word: "{word}"
 
-        Word: "{word}"
-
-        Requirements:
-        1. Return only JSON array format, no explanations
-        2. 5 synonyms progressing from complex to simple
-        3. Each synonym should be a single word, no definitions
-        4. Output language: {language.upper()}
-
-        Format example: ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"]
-
-        Now generate synonyms for "{word}" in {language.upper()}:
-        """
+Generate 5 synonyms from simple to very simple and common. Output language: {language.upper()}.
+Return only JSON array: ["synonym1", "synonym2", "synonym3", "synonym4", "synonym5"]"""
     
-    # Embed the prompt in Llama 3's instruction format
-    formatted_prompt = f"""
-    <|begin_of_text|><|start_header_id|>user<|end_header_id|>
-    {prompt}
-    <|eot_id|>
-    <|start_header_id|>assistant<|end_header_id|>
-    """
-    
-    # Format the request payload using the model's native structure
-    native_request = {
-        "prompt": formatted_prompt,
-        "max_gen_len": 200,  # reduce length to avoid too much explanation
-        "temperature": 0.2,  # reduce temperature to improve consistency
-    }
-    
-    # Convert the native request to JSON
-    request = json.dumps(native_request)
+    # Create conversation using the official format
+    conversation = [
+        {
+            "role": "user",
+            "content": [{"text": prompt}],
+        }
+    ]
     
     try:
-        # Invoke the model with the request
+        # Invoke the model using converse API
         logger.info(f"Invoking model for word: {word} with context: {context} in {language}")
-        response = client.invoke_model(modelId=model_id, body=request)
+        response = client.converse(
+            modelId=model_id,
+            messages=conversation,
+            inferenceConfig={"maxTokens": 200, "temperature": 0.2, "topP": 0.9},
+        )
         
-        # Decode the response body
-        model_response = json.loads(response["body"].read())
-        
-        # Extract the response text
-        response_text = model_response["generation"]
+        # Extract the response text using official format
+        response_text = response["output"]["message"]["content"][0]["text"]
         logger.info(f"Raw model response: {response_text}")
         
         # Try to parse JSON response
@@ -302,4 +270,3 @@ def generate_synonyms(word, context, language):
     except (ClientError, Exception) as e:
         logger.error(f"ERROR: Can't invoke '{model_id}'. Reason: {e}")
         raise
-
