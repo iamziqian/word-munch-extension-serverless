@@ -20,16 +20,67 @@ SERVICE_TYPE = os.getenv('SERVICE_TYPE')
 CACHE_ENABLED = os.getenv('CACHE_ENABLED', 'true').lower() == 'true'
 CACHE_TTL = 604800   # 7 days in seconds
 
+# Global variables for lazy loading - initialized as None
+_bedrock_client = None
+_dynamodb_resource = None
+_cache_table = None
+
+def get_bedrock_client():
+    """Lazy load Bedrock client with connection reuse"""
+    global _bedrock_client
+    if _bedrock_client is None:
+        logger.info("Initializing Bedrock client (lazy loading)...")
+        _bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
+        logger.info("Bedrock client initialized successfully")
+    return _bedrock_client
+
+def get_dynamodb_resource():
+    """Lazy load DynamoDB resource with connection reuse"""
+    global _dynamodb_resource
+    if _dynamodb_resource is None:
+        logger.info("Initializing DynamoDB resource (lazy loading)...")
+        _dynamodb_resource = boto3.resource('dynamodb')
+        logger.info("DynamoDB resource initialized successfully")
+    return _dynamodb_resource
+
+def get_cache_table():
+    """Lazy load cache table with connection reuse"""
+    global _cache_table
+    if _cache_table is None:
+        logger.info("Initializing cache table (lazy loading)...")
+        dynamodb = get_dynamodb_resource()
+        table_name = CACHE_TABLE_NAME or 'word-munch-cache'
+        _cache_table = dynamodb.Table(table_name)
+        logger.info(f"Cache table '{table_name}' initialized successfully")
+    return _cache_table
+
+def warm_up_function():
+    """Ultra-lightweight warm-up function - only initializes clients"""
+    try:
+        logger.info("Starting warm-up process...")
+        start_time = time.time()
+        
+        # Initialize all clients (lazy loading) - this is all we need
+        bedrock_client = get_bedrock_client()
+        dynamodb_resource = get_dynamodb_resource()
+        cache_table = get_cache_table()
+        
+        # Skip all test operations to minimize warm-up time and cost
+        # Clients are now initialized and ready for actual API calls
+        logger.info("All clients initialized and ready")
+        
+        elapsed_time = (time.time() - start_time) * 1000
+        logger.info(f"Warm-up completed successfully in {elapsed_time:.2f}ms")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Warm-up failed: {e}")
+        return False
+
 def generate_cache_key(word: str) -> str:
     """Generate cache key based on word for optimal DynamoDB performance"""
     normalized_word = word.lower().strip()
     return f"{normalized_word}"
-
-def get_cache_table():
-    """Get the cache table"""
-    dynamodb = boto3.resource('dynamodb')
-    table_name = CACHE_TABLE_NAME or 'word-munch-cache'
-    return dynamodb.Table(table_name)
 
 def check_cache(key: str) -> Optional[Dict[str, Any]]:
     """Check if the result exists in the cache"""
@@ -97,9 +148,32 @@ def delete_cache(key: str) -> bool:
 
 def lambda_handler(event, context):
     """
-    Word Muncher Lambda Handler
+    Word Muncher Lambda Handler with Warm-up Support
     Step-by-Step Vocabulary Simplification Service - Generate 5 Progressive Synonyms
     """
+    # Handle warm-up requests (cost-optimized)
+    if (event.get('source') == 'warmer' or 
+        event.get('warmer') == True or
+        event.get('source') == 'aws.events' or
+        event.get('detail-type') == 'Scheduled Event'):
+        
+        logger.info("Received warm-up request")
+        success = warm_up_function()
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'message': 'Function warmed up successfully',
+                'success': success,
+                'timestamp': int(time.time()),
+                'service': 'word-muncher'
+            })
+        }
+    
     logger.info(f"[{PROJECT_NAME}] Processing event: {event}")
 
     try:        
@@ -182,7 +256,8 @@ def generate_synonyms(word, context, language):
     """
     Generate progressive synonyms for a given word using Amazon Nova Micro with context
     """
-    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    # Use lazy-loaded client
+    bedrock_client = get_bedrock_client()
     
     # Using Amazon Nova Micro model for word simplification
     model_id = "amazon.nova-micro-v1:0"
@@ -212,10 +287,10 @@ Return only JSON array: ["synonym1", "synonym2", "synonym3", "synonym4", "synony
     try:
         # Invoke the model using converse API
         logger.info(f"Invoking model for word: {word} with context: {context} in {language}")
-        response = client.converse(
+        response = bedrock_client.converse(
             modelId=model_id,
             messages=conversation,
-            inferenceConfig={"maxTokens": 200, "temperature": 0.2, "topP": 0.9},
+            inferenceConfig={"maxTokens": 150, "temperature": 0.1, "topP": 0.9},
         )
         
         # Extract the response text using official format

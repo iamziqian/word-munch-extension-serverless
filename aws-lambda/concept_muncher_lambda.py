@@ -14,12 +14,83 @@ from decimal import Decimal
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Global variables for lazy loading - initialized as None
+_bedrock_client = None
+_dynamodb_resource = None
+_lambda_client = None
+_cache_table = None
+
+def get_bedrock_client():
+    """Lazy load Bedrock client with connection reuse"""
+    global _bedrock_client
+    if _bedrock_client is None:
+        logger.info("Initializing Bedrock client (lazy loading)...")
+        _bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')
+        logger.info("Bedrock client initialized successfully")
+    return _bedrock_client
+
+def get_dynamodb_resource():
+    """Lazy load DynamoDB resource with connection reuse"""
+    global _dynamodb_resource
+    if _dynamodb_resource is None:
+        logger.info("Initializing DynamoDB resource (lazy loading)...")
+        _dynamodb_resource = boto3.resource('dynamodb')
+        logger.info("DynamoDB resource initialized successfully")
+    return _dynamodb_resource
+
+def get_lambda_client():
+    """Lazy load Lambda client with connection reuse"""
+    global _lambda_client
+    if _lambda_client is None:
+        logger.info("Initializing Lambda client (lazy loading)...")
+        _lambda_client = boto3.client('lambda', region_name='us-east-1')
+        logger.info("Lambda client initialized successfully")
+    return _lambda_client
+
+def get_cache_table():
+    """Lazy load cache table with connection reuse"""
+    global _cache_table
+    if _cache_table is None:
+        logger.info("Initializing cache table (lazy loading)...")
+        dynamodb = get_dynamodb_resource()
+        cache_table_name = os.environ.get('CACHE_TABLE_NAME')
+        if cache_table_name:
+            _cache_table = dynamodb.Table(cache_table_name)
+            logger.info(f"Cache table '{cache_table_name}' initialized successfully")
+        else:
+            logger.warning("CACHE_TABLE_NAME environment variable not set")
+    return _cache_table
+
+def warm_up_function():
+    """Ultra-lightweight warm-up function - only initializes clients"""
+    try:
+        logger.info("Starting warm-up process...")
+        start_time = time.time()
+        
+        # Initialize all clients (lazy loading) - this is all we need
+        bedrock_client = get_bedrock_client()
+        dynamodb_resource = get_dynamodb_resource()
+        lambda_client = get_lambda_client()
+        cache_table = get_cache_table()
+        
+        # Skip all test operations to minimize warm-up time and cost
+        # Clients are now initialized and ready for actual API calls
+        logger.info("All clients initialized and ready")
+        
+        elapsed_time = (time.time() - start_time) * 1000
+        logger.info(f"Warm-up completed successfully in {elapsed_time:.2f}ms")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Warm-up failed: {e}")
+        return False
+
 def record_cognitive_data_async(user_id: str, analysis_data: Dict):
     """Asynchronously record cognitive data to the cognitive profile service"""
     def make_request():
         try:
-            # Call the cognitive profile Lambda
-            lambda_client = boto3.client('lambda', region_name='us-east-1')
+            # Use lazy-loaded Lambda client
+            lambda_client = get_lambda_client()
             
             payload = {
                 'action': 'record_analysis',
@@ -46,10 +117,11 @@ def record_cognitive_data_async(user_id: str, analysis_data: Dict):
 
 class TextComprehensionAnalyzer:
     def __init__(self):
-        self.bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-        self.dynamodb = boto3.resource('dynamodb')
+        # Use lazy-loaded clients instead of creating new ones
+        self.bedrock = None  # Will be initialized on first use
+        self.dynamodb = None  # Will be initialized on first use
         self.cache_table_name = os.environ.get('CACHE_TABLE_NAME')
-        self.cache_table = self.dynamodb.Table(self.cache_table_name) if self.cache_table_name else None
+        self.cache_table = None  # Will be initialized on first use
         self.cache_enabled = os.environ.get('CACHE_ENABLED', 'true').lower() == 'true'
         
         # Cache Master's tiered TTL strategy
@@ -58,6 +130,18 @@ class TextComprehensionAnalyzer:
             'segments': 2592000,              # 30 days - Text segmentation results (high stability)
             'embedding_segment': 604800,      # 7 days - Segment embeddings (medium value)
         }
+    
+    def _get_bedrock_client(self):
+        """Get Bedrock client with lazy loading"""
+        if self.bedrock is None:
+            self.bedrock = get_bedrock_client()
+        return self.bedrock
+    
+    def _get_cache_table(self):
+        """Get cache table with lazy loading"""
+        if self.cache_table is None:
+            self.cache_table = get_cache_table()
+        return self.cache_table
         
     def get_cache_key(self, prefix: str, content: str) -> str:
         """Generate standardized cache key"""
@@ -66,11 +150,15 @@ class TextComprehensionAnalyzer:
     
     def get_cached_data(self, cache_key: str) -> Any:
         """Generic cache read method"""
-        if not (self.cache_enabled and self.cache_table):
+        if not self.cache_enabled:
+            return None
+        
+        cache_table = self._get_cache_table()
+        if not cache_table:
             return None
             
         try:
-            response = self.cache_table.get_item(Key={'cacheKey': cache_key})
+            response = cache_table.get_item(Key={'cacheKey': cache_key})
             if 'Item' in response:
                 logger.info(f"Cache HIT: {cache_key[:20]}...")
                 return json.loads(response['Item']['data'])
@@ -82,12 +170,16 @@ class TextComprehensionAnalyzer:
     
     def set_cached_data(self, cache_key: str, data: Any, ttl_type: str):
         """Generic cache write method"""
-        if not (self.cache_enabled and self.cache_table):
+        if not self.cache_enabled:
+            return
+        
+        cache_table = self._get_cache_table()
+        if not cache_table:
             return
             
         try:
             ttl_seconds = self.cache_ttl.get(ttl_type, 604800)  # Default 7 days
-            self.cache_table.put_item(
+            cache_table.put_item(
                 Item={
                     'cacheKey': cache_key,
                     'data': json.dumps(data, ensure_ascii=False),
@@ -317,6 +409,8 @@ class TextComprehensionAnalyzer:
         This helps when context is not explicitly provided
         """
         try:
+            bedrock = self._get_bedrock_client()
+            
             system_prompt = "You are a text analysis expert. Extract key contextual information and respond only in valid JSON format."
             
             user_content = f"""Analyze this text and extract context:
@@ -337,7 +431,7 @@ Return JSON with:
                 "messages": [{"role": "user", "content": user_content}]
             })
             
-            response = self.bedrock.invoke_model(
+            response = bedrock.invoke_model(
                 body=body,
                 modelId="anthropic.claude-3-haiku-20240307-v1:0"
             )
@@ -392,13 +486,15 @@ Return JSON with:
     def _call_embedding_api(self, text: str) -> List[float]:
         """Call Bedrock Titan Embeddings API"""
         try:
+            bedrock = self._get_bedrock_client()
+            
             body = json.dumps({
                 "inputText": text,
                 "dimensions": 1024,
                 "normalize": True
             })
             
-            response = self.bedrock.invoke_model(
+            response = bedrock.invoke_model(
                 modelId="amazon.titan-embed-text-v2:0",
                 body=body,
                 contentType="application/json",
@@ -621,6 +717,8 @@ Return JSON with:
     def get_detailed_feedback_from_claude(self, original_text: str, user_understanding: str, analysis_result: Dict) -> Dict[str, Any]:
         """Get detailed feedback from Claude 3 Haiku"""
         try:
+            bedrock = self._get_bedrock_client()
+            
             # Build focused prompt with key missed segments
             poor_segments = [s for s in analysis_result['segments'] if s['similarity'] < 0.4]
             missed_content = [s['text'][:100] for s in poor_segments[:2]]  # Top 2 missed segments, truncated
@@ -650,7 +748,7 @@ Return JSON with:
                 "messages": [{"role": "user", "content": user_content}]
             })
             
-            response = self.bedrock.invoke_model(
+            response = bedrock.invoke_model(
                 body=body,
                 modelId="anthropic.claude-3-haiku-20240307-v1:0"
             )
@@ -689,9 +787,32 @@ Return JSON with:
 
 def lambda_handler(event, context):
     """
-    Concept Muncher Lambda Handler
+    Concept Muncher Lambda Handler with Warm-up Support
     Comprehension Analysis Service with Semantic Similarity
     """
+    # Handle warm-up requests (cost-optimized)
+    if (event.get('source') == 'warmer' or 
+        event.get('warmer') == True or
+        event.get('source') == 'aws.events' or
+        event.get('detail-type') == 'Scheduled Event'):
+        
+        logger.info("Received warm-up request")
+        success = warm_up_function()
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'message': 'Function warmed up successfully',
+                'success': success,
+                'timestamp': int(time.time()),
+                'service': 'concept-muncher'
+            })
+        }
+    
     try:
         # Parse request
         if isinstance(event.get('body'), str):

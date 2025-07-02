@@ -13,6 +13,8 @@ from aws_cdk import (
     aws_sns as sns,
     aws_sns_subscriptions as subs,
     aws_cloudwatch_actions as cloudwatch_actions,
+    aws_events as events,
+    aws_events_targets as targets
 )
 from constructs import Construct
 from datetime import datetime
@@ -144,6 +146,41 @@ class WordMunchStack(Stack):
         })
 
         # ============================================================================
+        # EventBridge for Lambda Warm-up (Word Muncher)
+        # ============================================================================
+        
+        # Create EventBridge Rule for Word Muncher warm-up
+        word_muncher_warmup_rule = events.Rule(
+            self, "WordMuncherWarmupRule",
+            rule_name=f"{self.project_name}-word-muncher-warmup-{self.env_name}",
+            description="Warm-up Word Muncher Lambda every 3 minutes to prevent cold starts",
+            schedule=events.Schedule.rate(Duration.minutes(3)),
+            enabled=True
+        )
+        
+        # Add Word Muncher Lambda as target
+        word_muncher_warmup_rule.add_target(
+            targets.LambdaFunction(
+                self.word_muncher_lambda,
+                event=events.RuleTargetInput.from_object({
+                    "warmer": True,
+                    "source": "aws.events",
+                    "detail-type": "Scheduled Event",
+                    "time": events.Schedule.rate(Duration.minutes(3)).expression_string
+                })
+            )
+        )
+        
+        # Add tags to the warmup rule
+        self._apply_common_tags(word_muncher_warmup_rule, {
+            "Service": "word-muncher",
+            "Purpose": "lambda-warmup"
+        })
+
+        print(f"Created EventBridge rule: {word_muncher_warmup_rule.rule_name}")
+        print("Word Muncher Lambda will be warmed up every 3 minutes")
+
+        # ============================================================================
         # Lambda Functions - concept-muncher
         # ============================================================================
 
@@ -172,6 +209,41 @@ class WordMunchStack(Stack):
             "Service": "concept-muncher",
             "Purpose": "text-comprehension-analysis"
         })
+
+        # ============================================================================
+        # EventBridge for Lambda Warm-up (Concept Muncher)
+        # ============================================================================
+        
+        # Create EventBridge Rule for Concept Muncher warm-up
+        concept_muncher_warmup_rule = events.Rule(
+            self, "ConceptMuncherWarmupRule",
+            rule_name=f"{self.project_name}-concept-muncher-warmup-{self.env_name}",
+            description="Warm-up Concept Muncher Lambda every 3 minutes to prevent cold starts",
+            schedule=events.Schedule.rate(Duration.minutes(3)),
+            enabled=True
+        )
+        
+        # Add Concept Muncher Lambda as target
+        concept_muncher_warmup_rule.add_target(
+            targets.LambdaFunction(
+                self.concept_muncher_lambda,
+                event=events.RuleTargetInput.from_object({
+                    "warmer": True,
+                    "source": "aws.events",
+                    "detail-type": "Scheduled Event",
+                    "time": events.Schedule.rate(Duration.minutes(3)).expression_string
+                })
+            )
+        )
+        
+        # Add tags to the warmup rule
+        self._apply_common_tags(concept_muncher_warmup_rule, {
+            "Service": "concept-muncher",
+            "Purpose": "lambda-warmup"
+        })
+
+        print(f"Created EventBridge rule: {concept_muncher_warmup_rule.rule_name}")
+        print("Concept Muncher Lambda will be warmed up every 3 minutes")
 
         # ============================================================================
         # Lambda Functions - cognitive-profile
@@ -492,14 +564,15 @@ class WordMunchStack(Stack):
             period=Duration.minutes(5),
             statistic="Sum"
         )
+
         dynamodb_write_alarm = cloudwatch.Alarm(
             self, "DynamoDBWriteCapacityAlarm",
             metric=dynamodb_write_metric,
-            threshold=100,  # Alarm if more than 100 write units in 5 minutes
-            evaluation_periods=1,
-            datapoints_to_alarm=1,
+            threshold=500,  # allow normal cache operations but detect abnormal cases
+            evaluation_periods=2,  # increase to 2 periods to avoid occasional peak triggers
+            datapoints_to_alarm=2,  # need 2 consecutive data points to exceed threshold to alarm
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            alarm_description="Alarm when DynamoDB ConsumedWriteCapacityUnits exceed 100 in 5 minutes"
+            alarm_description="Alarm when DynamoDB ConsumedWriteCapacityUnits exceed 500 in 10 minutes (2 consecutive periods)"
         )
 
         # =========================================================================
