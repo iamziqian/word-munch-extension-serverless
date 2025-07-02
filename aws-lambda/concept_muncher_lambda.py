@@ -825,7 +825,7 @@ def lambda_handler(event, context):
         context = body.get('context', '')
         auto_extract_context = body.get('auto_extract_context', False)
         
-        # Input validation
+        # Basic required fields validation
         if not original_text or not user_understanding:
             return {
                 'statusCode': 400,
@@ -838,8 +838,12 @@ def lambda_handler(event, context):
                 })
             }
         
-        # Validate text length
-        if len(original_text.split()) < 10:
+        # Simplified security validation - align with frontend limits
+        # Frontend validates: ≥6 words, ≤1000 chars, valid content
+        word_count = len(original_text.split())
+        
+        # Basic security checks with frontend-aligned limits
+        if word_count < 5:  # Slightly lower than frontend minimum (6) for edge cases
             return {
                 'statusCode': 400,
                 'headers': {
@@ -847,7 +851,48 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({
-                    'error': 'Original text must contain at least 10 words'
+                    'error': 'Text too short for concept analysis',
+                    'note': 'Frontend should ensure minimum word count'
+                })
+            }
+        
+        # Security check: prevent excessively long texts (cost protection)
+        if len(original_text) > 1200:  # Slightly higher than frontend limit (1000)
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: Text exceeds safe length limit',
+                    'note': 'Frontend validation should have caught this'
+                })
+            }
+        
+        # User understanding security check
+        if len(user_understanding) > 2000:  # Reasonable limit for user input
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: User understanding too long'
+                })
+            }
+        
+        # Context security check (optional field)
+        if context and len(context) > 500:  # Context should be brief
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: Context too long'
                 })
             }
         

@@ -192,6 +192,35 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': 'Missing required parameter: word'})
             }
         
+        # Simplified security validation - align with frontend limits
+        # Frontend already validates: 1-20 chars, no spaces
+        if len(word) > 25:  # Slightly higher than frontend limit for security
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: Word length exceeds safe limit',
+                    'note': 'Frontend validation should have caught this'
+                })
+            }
+        
+        # Context security check - frontend generates ~200 chars max
+        if len(context) > 300:  # Buffer for security
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: Context too long',
+                    'note': 'Frontend should limit context size'
+                })
+            }
+        
         # Check cache if enabled
         cache_key = None
         cached_result = None

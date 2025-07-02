@@ -1032,6 +1032,45 @@ def handle_record_analysis(cognitive_service, body):
             })
         }
     
+    # Simplified security validation - basic checks only
+    if len(user_id) > 200:  # Reasonable limit for user ID
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'error': 'Security check: User ID too long'
+            })
+        }
+    
+    # Analysis data size check - prevent excessive memory usage
+    try:
+        data_size = len(json.dumps(analysis_data))
+        if data_size > 100000:  # 100KB limit - reasonable for analysis data
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'error': 'Security check: Analysis data too large'
+                })
+            }
+    except (TypeError, ValueError):
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'error': 'Invalid analysis data format'
+            })
+        }
+    
     result = cognitive_service.record_analysis_result(user_id, analysis_data)
     
     return {
@@ -1058,6 +1097,32 @@ def handle_get_profile(cognitive_service, body):
             },
             'body': json.dumps({
                 'error': 'Missing user_id'
+            })
+        }
+    
+    # Simplified security validation for get_profile
+    if len(user_id) > 200:  # Reasonable limit for user ID
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'error': 'Security check: User ID too long'
+            })
+        }
+    
+    # Basic days parameter validation
+    if not isinstance(days, int) or days < 1 or days > 1000:  # More flexible limit
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'error': 'Security check: Invalid days parameter'
             })
         }
     
