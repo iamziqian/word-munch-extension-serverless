@@ -444,8 +444,11 @@ class SemanticSearchManager {
             if (this.searchCache.has(cacheKey)) {
                 const cached = this.searchCache.get(cacheKey);
                 if (Date.now() - cached.timestamp < 300000) { // 5 minutes
-                    console.log('Service Worker: Using cached semantic search results');
+                    console.log('🚀 Service Worker: Using cached semantic search results for:', query);
+                    console.log('💰 Service Worker: Saved API cost and ~500ms latency');
                     return cached.data;
+                } else {
+                    this.searchCache.delete(cacheKey);
                 }
             }
 

@@ -167,8 +167,12 @@ class SemanticSearchManager {
         if (this.searchCache.has(cacheKey)) {
             const cached = this.searchCache.get(cacheKey);
             if (Date.now() - cached.timestamp < 300000) { // 5 minutes
-                console.log('🔍 Semantic Search: Using cached results');
+                console.log('✅ Semantic Search: Using cached results for query:', query);
+                console.log('🔍 Cache stats:', { size: this.searchCache.size, cacheKey: cacheKey.slice(0, 20) + '...' });
                 return cached.data;
+            } else {
+                console.log('⏰ Semantic Search: Cache expired, removing old entry');
+                this.searchCache.delete(cacheKey);
             }
         }
 
@@ -185,7 +189,7 @@ class SemanticSearchManager {
                     query: query,
                     options: {
                         top_k: options.top_k || 5,
-                        similarity_threshold: options.similarity_threshold || 0.7,
+                        similarity_threshold: options.similarity_threshold || 0.2,  // 与前端调用保持一致
                         ...options
                     },
                     requestId: requestId
@@ -199,11 +203,14 @@ class SemanticSearchManager {
                 data: result,
                 timestamp: Date.now()
             });
+            console.log('💾 Semantic Search: Cached result for query:', query);
+            console.log('🔍 Cache stats after storage:', { size: this.searchCache.size, maxSize: 20 });
 
             // Cleanup cache if it gets too big
             if (this.searchCache.size > 20) {
                 const oldestKey = this.searchCache.keys().next().value;
                 this.searchCache.delete(oldestKey);
+                console.log('🧹 Semantic Search: Cleaned up old cache entry, new size:', this.searchCache.size);
             }
 
             return result;
@@ -528,7 +535,7 @@ class EventManager {
             // Don't close concept window for invalid selections when in concept mode
             if (!state.isConceptMode) {
                 console.log('Word Munch: Not in concept mode, close window');
-                WidgetManager.closeFloatingWidget();
+            WidgetManager.closeFloatingWidget();
             } else {
                 console.log('Word Munch: In concept mode, keep window open despite invalid selection');
             }
