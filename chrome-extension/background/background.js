@@ -3,6 +3,7 @@ let CONFIG = {
     WORD_API_ENDPOINT: '', // Will be loaded from config.js
     CONCEPT_API_ENDPOINT: '',
     COGNITIVE_API_ENDPOINT: '',
+    USER_API_ENDPOINT: '', // Will be loaded from config.js
     MEMORY_CACHE_TIME: 3000,
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000,
     DB_NAME: 'WordMunchCache',
@@ -22,22 +23,26 @@ async function loadAPIConfig() {
         const wordMatch = configText.match(/WORD_API_ENDPOINT:\s*'([^']+)'/);
         const conceptMatch = configText.match(/CONCEPT_API_ENDPOINT:\s*'([^']+)'/);
         const cognitiveMatch = configText.match(/COGNITIVE_API_ENDPOINT:\s*'([^']+)'/);
+        const userMatch = configText.match(/USER_API_ENDPOINT:\s*'([^']+)'/);
         
         if (wordMatch) CONFIG.WORD_API_ENDPOINT = wordMatch[1];
         if (conceptMatch) CONFIG.CONCEPT_API_ENDPOINT = conceptMatch[1];
         if (cognitiveMatch) CONFIG.COGNITIVE_API_ENDPOINT = cognitiveMatch[1];
+        if (userMatch) CONFIG.USER_API_ENDPOINT = userMatch[1];
         
         console.log('✅ Service Worker: API config loaded from config.js:');
         console.log('🔗 WORD_API_ENDPOINT:', CONFIG.WORD_API_ENDPOINT);
         console.log('🔗 CONCEPT_API_ENDPOINT:', CONFIG.CONCEPT_API_ENDPOINT);
         console.log('🔗 COGNITIVE_API_ENDPOINT:', CONFIG.COGNITIVE_API_ENDPOINT);
+        console.log('🔗 USER_API_ENDPOINT:', CONFIG.USER_API_ENDPOINT);
         
         // Save to storage for content script use
         await chrome.storage.sync.set({
             apiConfig: {
                 WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
                 CONCEPT_API_ENDPOINT: CONFIG.CONCEPT_API_ENDPOINT,
-                COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT
+                COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT,
+                USER_API_ENDPOINT: CONFIG.USER_API_ENDPOINT
             }
         });
         console.log('📦 Service Worker: API config saved to storage');
@@ -52,6 +57,7 @@ async function loadAPIConfig() {
                 CONFIG.WORD_API_ENDPOINT = result.apiConfig.WORD_API_ENDPOINT || '';
                 CONFIG.CONCEPT_API_ENDPOINT = result.apiConfig.CONCEPT_API_ENDPOINT || '';
                 CONFIG.COGNITIVE_API_ENDPOINT = result.apiConfig.COGNITIVE_API_ENDPOINT || '';
+                CONFIG.USER_API_ENDPOINT = result.apiConfig.USER_API_ENDPOINT || '';
                 console.log('📦 Service Worker: Fallback - loaded from storage');
             }
         } catch (storageError) {
@@ -463,6 +469,7 @@ class MessageRouter {
                         CONCEPT_API_ENDPOINT: CONFIG.CONCEPT_API_ENDPOINT,
                         WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
                         COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT,
+                        USER_API_ENDPOINT: CONFIG.USER_API_ENDPOINT,
                         success: true
                     };
                     
@@ -521,6 +528,138 @@ class MessageRouter {
 
                 case 'USER_LOGOUT':
                     await UserManager.handleUserLogout();
+                    break;
+
+                case 'USER_REGISTER':
+                    try {
+                        const result = await UserManager.registerUser(request.userData);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_REGISTRATION_SUCCESS',
+                                data: result,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: User registration failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_REGISTRATION_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    break;
+
+                case 'USER_AUTHENTICATE':
+                    try {
+                        const result = await UserManager.authenticateUser(request.credentials);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_AUTHENTICATION_SUCCESS',
+                                data: result,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: User authentication failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_AUTHENTICATION_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    break;
+
+                case 'USER_PASSWORD_RESET':
+                    try {
+                        const result = await UserManager.resetPassword(request.email);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PASSWORD_RESET_SUCCESS',
+                                data: result,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Password reset failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PASSWORD_RESET_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    break;
+
+                case 'USER_PROFILE_UPDATE':
+                    try {
+                        const result = await UserManager.updateUserProfile(request.profileData);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PROFILE_UPDATE_SUCCESS',
+                                data: result,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Profile update failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PROFILE_UPDATE_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    break;
+
+                case 'GET_USER_PROFILE':
+                    try {
+                        const result = await UserManager.getUserProfile();
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PROFILE_DATA',
+                                data: result,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Get user profile failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_PROFILE_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    break;
+
+                case 'USER_TOKEN_VERIFY':
+                    try {
+                        const isValid = await UserManager.verifyToken();
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_TOKEN_VERIFY_RESULT',
+                                data: { isValid },
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Token verification failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'USER_TOKEN_VERIFY_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
                     break;
                 
                 case 'GET_COGNITIVE_PROFILE':
@@ -1622,6 +1761,291 @@ class UserManager {
         } catch (error) {
             console.error('Service Worker: Handle user logout failed:', error);
             throw error;
+        }
+    }
+
+    // === New User API Methods ===
+
+    /**
+     * Register a new user
+     * @param {Object} userData - User registration data
+     * @param {string} userData.email - User email
+     * @param {string} userData.password - User password
+     * @param {string} userData.name - User display name
+     * @returns {Promise<Object>} Registration result
+     */
+    static async registerUser(userData) {
+        console.log('Service Worker: Registering user:', userData.email);
+        
+        if (!CONFIG.USER_API_ENDPOINT) {
+            throw new Error('User API endpoint not configured');
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: userData.email,
+                    password: userData.password,
+                    name: userData.name || userData.email.split('@')[0],
+                    timestamp: Date.now()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Registration failed' }));
+                throw new Error(errorData.message || `Registration failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: User registration successful:', result);
+
+            // Auto-login after successful registration
+            if (result.token) {
+                await this.handleUserLogin({
+                    email: userData.email,
+                    token: result.token,
+                    userId: result.userId || userData.email
+                });
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: User registration failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Authenticate user login
+     * @param {Object} credentials - Login credentials
+     * @param {string} credentials.email - User email
+     * @param {string} credentials.password - User password
+     * @returns {Promise<Object>} Authentication result
+     */
+    static async authenticateUser(credentials) {
+        console.log('Service Worker: Authenticating user:', credentials.email);
+        
+        if (!CONFIG.USER_API_ENDPOINT) {
+            throw new Error('User API endpoint not configured');
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: credentials.email,
+                    password: credentials.password,
+                    timestamp: Date.now()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Authentication failed' }));
+                throw new Error(errorData.message || `Authentication failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: User authentication successful');
+
+            // Store login info
+            if (result.token) {
+                await this.handleUserLogin({
+                    email: credentials.email,
+                    token: result.token,
+                    userId: result.userId || credentials.email
+                });
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: User authentication failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Reset user password
+     * @param {string} email - User email
+     * @returns {Promise<Object>} Reset result
+     */
+    static async resetPassword(email) {
+        console.log('Service Worker: Resetting password for:', email);
+        
+        if (!CONFIG.USER_API_ENDPOINT) {
+            throw new Error('User API endpoint not configured');
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/reset-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: email,
+                    timestamp: Date.now()
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Password reset failed' }));
+                throw new Error(errorData.message || `Password reset failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: Password reset successful');
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: Password reset failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update user profile
+     * @param {Object} profileData - Profile update data
+     * @returns {Promise<Object>} Update result
+     */
+    static async updateUserProfile(profileData) {
+        console.log('Service Worker: Updating user profile');
+        
+        if (!CONFIG.USER_API_ENDPOINT) {
+            throw new Error('User API endpoint not configured');
+        }
+
+        const authToken = await this.getAuthToken();
+        if (!authToken) {
+            throw new Error('User not logged in');
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/profile`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    ...profileData,
+                    timestamp: Date.now()
+                })
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    // Token expired, logout user
+                    await this.handleUserLogout();
+                    throw new Error('Session expired, please login again');
+                }
+                
+                const errorData = await response.json().catch(() => ({ message: 'Profile update failed' }));
+                throw new Error(errorData.message || `Profile update failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: Profile update successful');
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: Profile update failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get user profile
+     * @returns {Promise<Object>} User profile data
+     */
+    static async getUserProfile() {
+        console.log('Service Worker: Getting user profile');
+        
+        if (!CONFIG.USER_API_ENDPOINT) {
+            throw new Error('User API endpoint not configured');
+        }
+
+        const authToken = await this.getAuthToken();
+        if (!authToken) {
+            throw new Error('User not logged in');
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/profile`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    // Token expired, logout user
+                    await this.handleUserLogout();
+                    throw new Error('Session expired, please login again');
+                }
+                
+                const errorData = await response.json().catch(() => ({ message: 'Failed to get profile' }));
+                throw new Error(errorData.message || `Failed to get profile: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: Get profile successful');
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: Get profile failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Verify user token
+     * @returns {Promise<boolean>} Token validity
+     */
+    static async verifyToken() {
+        const authToken = await this.getAuthToken();
+        if (!authToken || !CONFIG.USER_API_ENDPOINT) {
+            return false;
+        }
+
+        try {
+            const response = await fetch(`${CONFIG.USER_API_ENDPOINT}/verify`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    await this.handleUserLogout();
+                }
+                return false;
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('Service Worker: Token verification failed:', error);
+            return false;
         }
     }
 }
