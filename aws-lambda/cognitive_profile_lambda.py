@@ -956,8 +956,87 @@ class CognitiveProfileService:
 def lambda_handler(event, context):
     """
     Cognitive Profile Lambda Handler
-    Independent service for cognitive profile management
+    Processes both SQS events and direct API calls
     """
+    try:
+        # Check if this is an SQS event
+        if 'Records' in event:
+            return handle_sqs_events(event, context)
+        
+        # Handle direct API calls (for backward compatibility)
+        return handle_api_request(event, context)
+        
+    except Exception as e:
+        logger.error(f"Cognitive profile lambda handler error: {e}")
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'error': 'Internal server error',
+                'message': str(e)
+            })
+        }
+
+def handle_sqs_events(event, context):
+    """Handle SQS events from cognitive data queue"""
+    logger.info(f"Processing {len(event['Records'])} SQS messages")
+    
+    cognitive_service = CognitiveProfileService()
+    failed_messages = []
+    
+    for record in event['Records']:
+        try:
+            # Parse SQS message
+            message_body = json.loads(record['body'])
+            action = message_body.get('action')
+            
+            logger.info(f"Processing SQS message: {action} for user {message_body.get('user_id', 'unknown')}")
+            
+            if action == 'record_analysis':
+                user_id = message_body.get('user_id')
+                analysis_data = message_body.get('analysis_data')
+                
+                if user_id and analysis_data:
+                    result = cognitive_service.record_analysis_result(user_id, analysis_data)
+                    if result.get('success'):
+                        logger.info(f"Successfully processed cognitive data for user {user_id}")
+                    else:
+                        logger.error(f"Failed to process cognitive data for user {user_id}: {result.get('error')}")
+                        failed_messages.append({
+                            'itemIdentifier': record.get('messageId', 'unknown')
+                        })
+                else:
+                    logger.error(f"Missing required fields in SQS message: user_id or analysis_data")
+                    failed_messages.append({
+                        'itemIdentifier': record.get('messageId', 'unknown')
+                    })
+            else:
+                logger.warning(f"Unknown action in SQS message: {action}")
+                failed_messages.append({
+                    'itemIdentifier': record.get('messageId', 'unknown')
+                })
+                
+        except Exception as e:
+            logger.error(f"Failed to process SQS message {record.get('messageId', 'unknown')}: {e}")
+            failed_messages.append({
+                'itemIdentifier': record.get('messageId', 'unknown')
+            })
+    
+    # Return partial batch failure response if any messages failed
+    if failed_messages:
+        logger.warning(f"Failed to process {len(failed_messages)} out of {len(event['Records'])} messages")
+        return {
+            'batchItemFailures': failed_messages
+        }
+    
+    logger.info(f"Successfully processed all {len(event['Records'])} SQS messages")
+    return {}
+
+def handle_api_request(event, context):
+    """Handle direct API requests (for backward compatibility)"""
     try:
         # Parse request
         if isinstance(event.get('body'), str):
@@ -1001,7 +1080,7 @@ def lambda_handler(event, context):
             }
         
     except Exception as e:
-        logger.error(f"Cognitive profile lambda handler error: {e}")
+        logger.error(f"API request handler error: {e}")
         return {
             'statusCode': 500,
             'headers': {
