@@ -21,22 +21,109 @@ body {
 }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 20px;
+    background: linear-gradient(135deg, #FF8C42 0%, #FF7043 50%, #FF6B35 100%);
+    padding: 18px 20px 20px 20px;
     text-align: center;
+    border-radius: 12px 12px 0 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(255, 140, 66, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.title {
-    font-size: 24px;
+/* Add green snake-shaped decoration */
+.header::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle, #7CB342 30%, #8BC34A 70%);
+    border-radius: 50%;
+    opacity: 0.15;
+    animation: snake-float 4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+/* Add subtle dot-like textures (simulating snake scales) */
+.header::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 25% 25%, rgba(124, 179, 66, 0.1) 1px, transparent 1px),
+                radial-gradient(circle at 75% 75%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes snake-float {
+    0%, 100% { 
+        transform: translate(0, 0) rotate(0deg); 
+        opacity: 0.15; 
+    }
+    25% { 
+        transform: translate(-10px, 5px) rotate(90deg); 
+        opacity: 0.25; 
+    }
+    50% { 
+        transform: translate(-15px, -5px) rotate(180deg); 
+        opacity: 0.15; 
+    }
+    75% { 
+        transform: translate(-5px, -10px) rotate(270deg); 
+        opacity: 0.2; 
+    }
+}
+
+.header .title {
+    margin: 0;
+    font-size: 20px;
     font-weight: 700;
-    margin-bottom: 4px;
+    color: #FFF8E7;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 8px rgba(62, 39, 35, 0.4);
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
 
-.subtitle {
-    font-size: 14px;
-    opacity: 0.9;
-    font-weight: 400;
+/* Snake emoji glowing effect */
+.header .title::before {
+    content: '🐍';
+    font-size: 22px;
+    filter: drop-shadow(0 0 12px rgba(124, 179, 66, 0.6));
+    animation: snake-glow 3s ease-in-out infinite alternate;
+}
+
+@keyframes snake-glow {
+    from { 
+        filter: drop-shadow(0 0 8px rgba(124, 179, 66, 0.5)) 
+                drop-shadow(0 0 16px rgba(255, 140, 66, 0.3)); 
+    }
+    to { 
+        filter: drop-shadow(0 0 16px rgba(124, 179, 66, 0.8)) 
+                drop-shadow(0 0 24px rgba(255, 140, 66, 0.5)); 
+    }
+}
+
+.header .subtitle {
+    margin: 6px 0 0 0;
+    font-size: 12px;
+    color: rgba(255, 248, 231, 0.95);
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 2;
+    text-shadow: 0 1px 4px rgba(62, 39, 35, 0.4);
 }
 
 .main-content {
@@ -128,11 +215,11 @@ body {
 }
 
 input:checked + .toggle-slider {
-    background-color: #667eea;
+    background-color: #7CB342;
 }
 
 input:checked + .toggle-slider:hover {
-    background-color: #5a6fd8;
+    background-color: #689F38;
 }
 
 input:checked + .toggle-slider:before {
@@ -140,8 +227,8 @@ input:checked + .toggle-slider:before {
 }
 
 input:focus + .toggle-slider {
-    box-shadow: 0 0 1px #667eea;
-    outline: 2px solid #667eea40;
+    box-shadow: 0 0 1px #7CB342;
+    outline: 2px solid rgba(124, 179, 66, 0.4);
     outline-offset: 2px;
 }
 
@@ -171,7 +258,7 @@ input:disabled + .toggle-slider:before {
 
 .radio-item input[type="radio"] {
     margin-right: 8px;
-    accent-color: #667eea;
+    accent-color: #7CB342;
 }
 
 .radio-text {
@@ -193,7 +280,7 @@ input:disabled + .toggle-slider:before {
 
 .language-select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #7CB342;
 }
 
 /* Login form */
@@ -258,8 +345,8 @@ input:disabled + .toggle-slider:before {
 
 .input-field:focus {
     outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-color: #7CB342;
+    box-shadow: 0 0 0 2px rgba(124, 179, 66, 0.2);
 }
 
 .input-field:invalid {
@@ -371,14 +458,14 @@ input:disabled + .toggle-slider:before {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+    background: linear-gradient(135deg, #FF8C42, #FF7043);
+    color: #FFF8E7;
+    border: 1px solid rgba(255, 248, 231, 0.2);
 }
 
 .btn-primary:hover {
+    background: linear-gradient(135deg, #FF7043, #FF6B35);
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
 }
 
 .btn-primary:disabled {
@@ -538,24 +625,127 @@ input:disabled {
     cursor: not-allowed;
 }
 
-/* Reading mode button style */
+/* Reading mode button style - Snake-themed */
 .reader-mode-button {
     width: 100%;
     padding: 12px 16px;
     border: none;
     border-radius: 8px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
+    background: linear-gradient(135deg, #FF8C42, #FF7043);
+    color: #FFF8E7;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     font-size: 14px;
     font-weight: 500;
     margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(255, 140, 66, 0.25);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 248, 231, 0.2);
+}
+
+.reader-mode-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 248, 231, 0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.reader-mode-button:hover::before {
+    left: 100%;
 }
 
 .reader-mode-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 140, 66, 0.4);
+    background: linear-gradient(135deg, #FF7043, #FF6B35);
+}
+
+.reader-mode-button:active {
+    transform: translateY(0);
+}
+
+/* Dashboard button base style - Snake-themed */
+.dashboard-button {
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #FFB74D, #AED581);
+    color: #3E2723;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+    box-shadow: 0 3px 8px rgba(255, 183, 77, 0.25);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 248, 231, 0.3);
+}
+
+.dashboard-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.dashboard-button:hover::before {
+    left: 100%;
+}
+
+.dashboard-button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 5px 15px rgba(255, 183, 77, 0.4);
+    background: linear-gradient(135deg, #FFA726, #9CCC65);
+}
+
+.dashboard-button:active {
+    transform: translateY(0);
+}
+
+/* Enhanced dashboard button for featured placement - 贪吃蛇绿色系 */
+.dashboard-button.featured {
+    background: linear-gradient(135deg, #7CB342, #8BC34A);
+    color: #FFF8E7;
+    box-shadow: 0 4px 12px rgba(124, 179, 66, 0.25);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 248, 231, 0.2);
+}
+
+.dashboard-button.featured::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 248, 231, 0.25), transparent);
+    transition: left 0.6s ease;
+}
+
+.dashboard-button.featured:hover::before {
+    left: 100%;
+}
+
+.dashboard-button.featured:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(124, 179, 66, 0.4);
+    background: linear-gradient(135deg, #689F38, #7CB342);
+}
+
+.dashboard-button.featured:active {
+    transform: translateY(0);
 }
 
 /* Focus mode setting style */
@@ -669,7 +859,79 @@ input:disabled {
 
 /* Center the sign-in and create account buttons */
 #login-content .btn-primary,
-#register-content .btn-primary {
+#signup-content .btn-primary {
+    background: linear-gradient(135deg, #FF8C42, #FF7043);
+    color: #FFF8E7;
+    border: 1px solid rgba(255, 248, 231, 0.2);
+    box-shadow: 0 2px 4px rgba(255, 140, 66, 0.2);
     display: block;
     margin: 0 auto;
+}
+
+/* Feature group styling */
+.feature-group {
+    margin-bottom: 20px;
+    background: #fafbfc;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+}
+
+.feature-group:last-child {
+    margin-bottom: 0;
+}
+
+.group-title {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* Compact control sections within groups */
+.control-section.compact {
+    margin-bottom: 16px;
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+.control-section.compact:last-child {
+    margin-bottom: 0;
+}
+
+.control-section.compact .section-title {
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #475569;
+    font-weight: 500;
+}
+
+/* Dashboard description base style - Snake-themed */
+.dashboard-description {
+    background: rgba(255, 183, 77, 0.12);
+    border-left: 3px solid #FFB74D;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #3E2723;
+    line-height: 1.4;
+}
+
+/* Update dashboard description for better contrast in groups */
+.feature-group .dashboard-description {
+    background: rgba(124, 179, 66, 0.12);
+    border-left: 3px solid #7CB342;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #3E2723;
+    line-height: 1.4;
 }

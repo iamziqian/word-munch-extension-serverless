@@ -139,10 +139,10 @@ document.addEventListener('DOMContentLoaded', function() {
             logoutBtn.addEventListener('click', handleLogout);
         }
         
-        // Cognitive dashboard button
-        const cognitiveBtn = document.getElementById('cognitive-dashboard-btn');
-        if (cognitiveBtn) {
-            cognitiveBtn.addEventListener('click', showCognitiveDashboard);
+        // Universal cognitive dashboard button (for all users)
+        const universalDashboardBtn = document.getElementById('universal-dashboard-btn');
+        if (universalDashboardBtn) {
+            universalDashboardBtn.addEventListener('click', showUniversalCognitiveDashboard);
         }
         
         // Forgot password link
@@ -364,31 +364,45 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Show cognitive dashboard
-    async function showCognitiveDashboard() {
+    // Show universal cognitive dashboard (for all users including guests)
+    async function showUniversalCognitiveDashboard() {
         try {
             // Get current active tab
             const tabs = await chrome.tabs.query({active: true, currentWindow: true});
             if (tabs[0]) {
+                // Check if user is logged in
+                const userInfo = await chrome.storage.sync.get(['userEmail', 'userToken', 'userId']);
+                
+                let userId = 'anonymous_user';
+                let isAnonymous = true;
+                
+                if (userInfo.userEmail && userInfo.userToken) {
+                    // User is logged in, use their ID
+                    userId = userInfo.userId || userInfo.userEmail;
+                    isAnonymous = false;
+                }
+                
                 // Send message to content script to show dashboard
                 chrome.tabs.sendMessage(tabs[0].id, {
-                    type: 'SHOW_COGNITIVE_DASHBOARD'
+                    type: 'SHOW_COGNITIVE_DASHBOARD',
+                    userId: userId,
+                    isAnonymous: isAnonymous
                 }, (response) => {
                     if (chrome.runtime.lastError) {
-                        console.error('Dashboard message error:', chrome.runtime.lastError.message);
+                        console.error('Universal dashboard message error:', chrome.runtime.lastError.message);
                         if (chrome.runtime.lastError.message.includes('Could not establish connection')) {
                             showMessage('Please refresh the page and try again', 'error');
                         } else {
                             showMessage('Failed to open dashboard', 'error');
                         }
                     } else {
-                        console.log('Dashboard message sent successfully');
+                        console.log('Universal dashboard message sent successfully');
                         window.close(); // Close popup after opening dashboard
                     }
                 });
             }
         } catch (error) {
-            console.error('Failed to show cognitive dashboard:', error);
+            console.error('Failed to show universal cognitive dashboard:', error);
             showMessage('Failed to open dashboard', 'error');
         }
     }

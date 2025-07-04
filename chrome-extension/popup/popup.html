@@ -10,7 +10,7 @@
     <div class="container">
         <header class="header">
             <h1 class="title">Word Munch</h1>
-            <p class="subtitle">Smart word simplification</p>
+            <div class="subtitle">Munching Words, Growing Smarter</div>
         </header>
         
         <div class="main-content">
@@ -25,138 +25,161 @@
                 </div>
             </div>
             
-            <!-- Language setting -->
-            <div class="control-section">
-                <h3 class="section-title">Output language</h3>
-                <select id="output-language" class="language-select">
-                    <option value="english">English</option>
-                    <option value="spanish">Español</option>
-                    <option value="chinese">中文</option>
-                    <option value="japanese">日本語</option>
-                    <option value="korean">한국어</option>
-                </select>
+            <!-- AI-Powered Features Section -->
+            <div class="feature-group">
+                <h2 class="group-title">🤖 AI-Powered Features</h2>
+                
+                <!-- Reading mode function -->
+                <div class="control-section compact">
+                    <h3 class="section-title">Smart reading mode</h3>
+                    <button id="reader-mode-btn" class="reader-mode-button">
+                        📖 Start chunk reading mode
+                    </button>
+                </div>
+
+                <!-- Cognitive Growth Analysis -->
+                <div class="control-section compact">
+                    <h3 class="section-title">Cognitive growth analysis</h3>
+                    <button id="universal-dashboard-btn" class="dashboard-button featured">
+                        🧠 View cognitive analysis
+                    </button>
+                    <div class="dashboard-description">
+                        AI-powered reading comprehension analysis with personalized improvement insights
+                    </div>
+                </div>
             </div>
 
-            <!-- Reading mode function -->
-            <div class="control-section">
-                <h3 class="section-title">Reading mode</h3>
-                <button id="reader-mode-btn" class="reader-mode-button">
-                    📖 Start reading chunk mode
-                </button>
-            </div>
+            <!-- Settings Section -->
+            <div class="feature-group">
+                <h2 class="group-title">⚙️ Settings</h2>
+                
+                <!-- Language setting -->
+                <div class="control-section compact">
+                    <h3 class="section-title">Output language</h3>
+                    <select id="output-language" class="language-select">
+                        <option value="english">English</option>
+                        <option value="spanish">Español</option>
+                        <option value="chinese">中文</option>
+                        <option value="japanese">日本語</option>
+                        <option value="korean">한국어</option>
+                    </select>
+                </div>
 
-            <!-- Focus mode setting -->
-            <div class="control-section">
-                <h3 class="section-title">Focus setting</h3>
-                
-                <div class="focus-modes">
-                    <div class="mode-option" data-mode="gentle">
-                        <div class="mode-icon">🌸</div>
-                        <div class="mode-info">
-                            <div class="mode-name">Gentle mode</div>
-                            <div class="mode-desc">Keep more context</div>
+                <!-- Focus mode setting -->
+                <div class="control-section compact">
+                    <h3 class="section-title">Focus setting</h3>
+                    
+                    <div class="focus-modes">
+                        <div class="mode-option" data-mode="gentle">
+                            <div class="mode-icon">🌸</div>
+                            <div class="mode-info">
+                                <div class="mode-name">Gentle mode</div>
+                                <div class="mode-desc">Keep more context</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mode-option active" data-mode="balanced">
+                            <div class="mode-icon">⚖️</div>
+                            <div class="mode-info">
+                                <div class="mode-name">Balanced mode</div>
+                                <div class="mode-desc">Recommended default setting</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mode-option" data-mode="focused">
+                            <div class="mode-icon">🎯</div>
+                            <div class="mode-info">
+                                <div class="mode-name">Focused mode</div>
+                                <div class="mode-desc">Strongly highlight current paragraph</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mode-option" data-mode="minimal">
+                            <div class="mode-icon">🔍</div>
+                            <div class="mode-info">
+                                <div class="mode-name">Minimal mode</div>
+                                <div class="mode-desc">Almost hide other paragraphs</div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="mode-option active" data-mode="balanced">
-                        <div class="mode-icon">⚖️</div>
-                        <div class="mode-info">
-                            <div class="mode-name">Balanced mode</div>
-                            <div class="mode-desc">Recommended default setting</div>
-                        </div>
-                    </div>
-                    
-                    <div class="mode-option" data-mode="focused">
-                        <div class="mode-icon">🎯</div>
-                        <div class="mode-info">
-                            <div class="mode-name">Focused mode</div>
-                            <div class="mode-desc">Strongly highlight current paragraph</div>
-                        </div>
-                    </div>
-                    
-                    <div class="mode-option" data-mode="minimal">
-                        <div class="mode-icon">🔍</div>
-                        <div class="mode-info">
-                            <div class="mode-name">Minimal mode</div>
-                            <div class="mode-desc">Almost hide other paragraphs</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="focus-preview">
-                    <div class="preview-text">
-                        <div class="preview-line unfocused">Display effect of other paragraphs</div>
-                        <div class="preview-line focused">Display effect of focused paragraph</div>
-                        <div class="preview-line unfocused">Display effect of other paragraphs</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- User login status -->
-            <div class="control-section" id="user-section">
-                <h3 class="section-title">Account</h3>
-                
-                <!-- Login Form -->
-                <div id="login-form" class="login-form">
-                    <div class="form-tabs">
-                        <button id="login-tab" class="tab-btn active" data-tab="login">Sign In</button>
-                        <button id="register-tab" class="tab-btn" data-tab="register">Sign Up</button>
-                    </div>
-                    
-                    <!-- Login Tab -->
-                    <div id="login-content" class="tab-content active">
-                        <input type="email" id="login-email" placeholder="Email address" class="input-field">
-                        <input type="password" id="login-password" placeholder="Password" class="input-field">
-                        <button id="login-btn" class="btn btn-primary">Sign In</button>
-                        <div class="auth-links">
-                            <a href="#" id="forgot-password-link">Forgot password?</a>
-                        </div>
-                    </div>
-                    
-                    <!-- Register Tab -->
-                    <div id="register-content" class="tab-content">
-                        <input type="text" id="register-name" placeholder="Full name" class="input-field">
-                        <input type="email" id="register-email" placeholder="Email address" class="input-field">
-                        <input type="password" id="register-password" placeholder="Password (8+ characters)" class="input-field">
-                        <input type="password" id="register-confirm" placeholder="Confirm password" class="input-field">
-                        <button id="register-btn" class="btn btn-primary">Create Account</button>
-                        <div class="auth-disclaimer">
-                            <small>By creating an account, you agree to our Terms of Service and Privacy Policy</small>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- User Info (when logged in) -->
-                <div id="user-info" class="user-info" style="display: none;">
-                    <div class="user-avatar">
-                        <span id="user-avatar-text">U</span>
-                    </div>
-                    <div class="user-details">
-                        <div id="user-name" class="user-name">User Name</div>
-                        <div id="user-email" class="user-email">user@example.com</div>
-                        <div class="user-actions">
-                            <button id="cognitive-dashboard-btn" class="btn btn-secondary">📊 My Progress</button>
-                            <button id="logout-btn" class="btn btn-small">Sign Out</button>
+                    <div class="focus-preview">
+                        <div class="preview-text">
+                            <div class="preview-line unfocused">Display effect of other paragraphs</div>
+                            <div class="preview-line focused">Display effect of focused paragraph</div>
+                            <div class="preview-line unfocused">Display effect of other paragraphs</div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Statistics -->
-            <div class="control-section">
-                <h3 class="section-title">Usage statistics</h3>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-number" id="today-count">0</div>
-                        <div class="stat-label">Today</div>
+            <!-- User Account Section -->
+            <div class="feature-group">
+                <h2 class="group-title">👤 Account</h2>
+                
+                <!-- User login status -->
+                <div class="control-section compact" id="user-section">
+                    <!-- Login Form -->
+                    <div id="login-form" class="login-form">
+                        <div class="form-tabs">
+                            <button id="login-tab" class="tab-btn active" data-tab="login">Sign In</button>
+                            <button id="register-tab" class="tab-btn" data-tab="register">Sign Up</button>
+                        </div>
+                        
+                        <!-- Login Tab -->
+                        <div id="login-content" class="tab-content active">
+                            <input type="email" id="login-email" placeholder="Email address" class="input-field">
+                            <input type="password" id="login-password" placeholder="Password" class="input-field">
+                            <button id="login-btn" class="btn btn-primary">Sign In</button>
+                            <div class="auth-links">
+                                <a href="#" id="forgot-password-link">Forgot password?</a>
+                            </div>
+                        </div>
+                        
+                        <!-- Register Tab -->
+                        <div id="register-content" class="tab-content">
+                            <input type="text" id="register-name" placeholder="Full name" class="input-field">
+                            <input type="email" id="register-email" placeholder="Email address" class="input-field">
+                            <input type="password" id="register-password" placeholder="Password (8+ characters)" class="input-field">
+                            <input type="password" id="register-confirm" placeholder="Confirm password" class="input-field">
+                            <button id="register-btn" class="btn btn-primary">Create Account</button>
+                            <div class="auth-disclaimer">
+                                <small>By creating an account, you agree to our Terms of Service and Privacy Policy</small>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-number" id="week-count">0</div>
-                        <div class="stat-label">This Week</div>
+                    
+                    <!-- User Info (when logged in) -->
+                    <div id="user-info" class="user-info" style="display: none;">
+                        <div class="user-avatar">
+                            <span id="user-avatar-text">U</span>
+                        </div>
+                        <div class="user-details">
+                            <div id="user-name" class="user-name">User Name</div>
+                            <div id="user-email" class="user-email">user@example.com</div>
+                            <div class="user-actions">
+                                <button id="logout-btn" class="btn btn-small">Sign Out</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-number" id="total-count">0</div>
-                        <div class="stat-label">Total</div>
+                </div>
+                
+                <!-- Statistics -->
+                <div class="control-section compact">
+                    <h3 class="section-title">Usage statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-number" id="today-count">0</div>
+                            <div class="stat-label">Today</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="week-count">0</div>
+                            <div class="stat-label">This Week</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="total-count">0</div>
+                            <div class="stat-label">Total</div>
+                        </div>
                     </div>
                 </div>
             </div>

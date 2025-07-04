@@ -338,11 +338,6 @@ class CognitiveProfileManager {
 
 const cognitiveManager = new CognitiveProfileManager()
 
-// Global function for context menu
-async function handleCognitiveDashboardRequest(tabId) {
-    await cognitiveManager.handleCognitiveDashboardRequest(tabId);
-}
-
 // === Context Menu Manager ===
 class ContextMenuManager {
     static async initializeContextMenus() {
@@ -356,18 +351,7 @@ class ContextMenuManager {
             // Clear existing menus first
             await chrome.contextMenus.removeAll();
             
-            // Create cognitive dashboard menu
-            chrome.contextMenus.create({
-                id: 'show-cognitive-dashboard',
-                title: 'View My Cognitive Growth',
-                contexts: ['page', 'selection']
-            }, () => {
-                if (chrome.runtime.lastError) {
-                    console.error('Service Worker: Failed to create context menu:', chrome.runtime.lastError.message);
-                } else {
-                    console.log('Service Worker: Context menu created successfully');
-                }
-            });
+            console.log('Service Worker: Context menus cleared - cognitive dashboard moved to popup');
 
         } catch (error) {
             console.error('Service Worker: Failed to initialize context menus:', error);
@@ -375,27 +359,8 @@ class ContextMenuManager {
     }
 
     static setupContextMenuListener() {
-        try {
-            if (!chrome.contextMenus || !chrome.contextMenus.onClicked) {
-                console.log('Service Worker: Context menu click listener not available');
-                return;
-            }
-
-            chrome.contextMenus.onClicked.addListener((info, tab) => {
-                try {
-                    if (info.menuItemId === 'show-cognitive-dashboard' && tab && tab.id) {
-                        handleCognitiveDashboardRequest(tab.id);
-                    }
-                } catch (error) {
-                    console.error('Service Worker: Context menu click handler error:', error);
-                }
-            });
-
-            console.log('Service Worker: Context menu click listener added');
-
-        } catch (error) {
-            console.error('Service Worker: Failed to setup context menu listener:', error);
-        }
+        // Context menu listener no longer needed - cognitive dashboard moved to popup
+        console.log('Service Worker: Context menu listener disabled - using popup instead');
     }
 }
 
