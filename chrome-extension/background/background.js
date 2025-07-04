@@ -17,16 +17,22 @@ async function loadAPIConfig() {
         const response = await fetch(chrome.runtime.getURL('config/config.js'));
         const configText = await response.text();
         
-        // Extract API endpoints using regex
-        const wordMatch = configText.match(/WORD_API_ENDPOINT:\s*'([^']+)'/);
-        const conceptMatch = configText.match(/CONCEPT_API_ENDPOINT:\s*'([^']+)'/);
-        const cognitiveMatch = configText.match(/COGNITIVE_API_ENDPOINT:\s*'([^']+)'/);
-        const userMatch = configText.match(/USER_API_ENDPOINT:\s*'([^']+)'/);
+        // Extract API endpoints using regex - support both single and double quotes
+        const wordMatch = configText.match(/WORD_API_ENDPOINT:\s*['"](.*?)['"]/);
+        const conceptMatch = configText.match(/CONCEPT_API_ENDPOINT:\s*['"](.*?)['"]/);
+        const cognitiveMatch = configText.match(/COGNITIVE_API_ENDPOINT:\s*['"](.*?)['"]/);
+        const userMatch = configText.match(/USER_API_ENDPOINT:\s*['"](.*?)['"]/);
         
         if (wordMatch) CONFIG.WORD_API_ENDPOINT = wordMatch[1];
         if (conceptMatch) CONFIG.CONCEPT_API_ENDPOINT = conceptMatch[1];
         if (cognitiveMatch) CONFIG.COGNITIVE_API_ENDPOINT = cognitiveMatch[1];
         if (userMatch) CONFIG.USER_API_ENDPOINT = userMatch[1];
+        
+        console.log('Service Worker: API endpoints parsed from config.js:');
+        console.log('- WORD_API_ENDPOINT:', CONFIG.WORD_API_ENDPOINT);
+        console.log('- CONCEPT_API_ENDPOINT:', CONFIG.CONCEPT_API_ENDPOINT);
+        console.log('- COGNITIVE_API_ENDPOINT:', CONFIG.COGNITIVE_API_ENDPOINT);
+        console.log('- USER_API_ENDPOINT:', CONFIG.USER_API_ENDPOINT);
         
         // Save to storage for content script use
         await chrome.storage.sync.set({
@@ -92,6 +98,18 @@ class CognitiveProfileManager {
     constructor() {
         this.profileCache = new Map();
         this.cognitiveAPI = CONFIG.COGNITIVE_API_ENDPOINT;
+        
+        // Check if cognitive API endpoint is properly configured
+        if (!this.cognitiveAPI || 
+            this.cognitiveAPI === '' || 
+            this.cognitiveAPI.includes('YOUR_COGNITIVE_API_ENDPOINT_HERE') ||
+            this.cognitiveAPI === 'YOUR_COGNITIVE_API_ENDPOINT_HERE') {
+            
+            console.warn('Service Worker: Cognitive API endpoint not configured. Using demo data for cognitive analysis.');
+            console.log('Service Worker: To use real cognitive analysis, please configure COGNITIVE_API_ENDPOINT in config.js');
+        } else {
+            console.log('Service Worker: Cognitive API endpoint configured:', this.cognitiveAPI);
+        }
     }
 
     async handleCognitiveDashboardRequest(tabId) {
@@ -170,6 +188,7 @@ class CognitiveProfileManager {
         if (this.profileCache.has(cacheKey)) {
             const cached = this.profileCache.get(cacheKey);
             if (Date.now() - cached.timestamp < 300000) {
+                console.log('Service Worker: Using cached cognitive profile');
                 return cached.data;
             }
         }
@@ -187,9 +206,35 @@ class CognitiveProfileManager {
             
             return demoData;
         }
+
+        // Check if cognitive API endpoint is properly configured
+        if (!this.cognitiveAPI || 
+            this.cognitiveAPI === '' || 
+            this.cognitiveAPI.includes('YOUR_COGNITIVE_API_ENDPOINT_HERE') ||
+            this.cognitiveAPI === 'YOUR_COGNITIVE_API_ENDPOINT_HERE') {
+            
+            console.log('Service Worker: Cognitive API endpoint not configured, using demo data');
+            const demoData = this.generateDemoData();
+            
+            this.profileCache.set(cacheKey, {
+                data: demoData,
+                timestamp: Date.now()
+            });
+            
+            return demoData;
+        }
     
         try {
+            console.log('Service Worker: Fetching cognitive profile from API:', this.cognitiveAPI);
             const authToken = await UserManager.getAuthToken();
+            
+            const requestBody = {
+                action: 'get_profile',
+                user_id: userId,
+                days: days
+            };
+            
+            console.log('Service Worker: Cognitive API request body:', requestBody);
             
             const response = await fetch(this.cognitiveAPI, {
                 method: 'POST',
@@ -197,18 +242,35 @@ class CognitiveProfileManager {
                     'Content-Type': 'application/json',
                     'Authorization': authToken ? `Bearer ${authToken}` : ''
                 },
-                body: JSON.stringify({
-                    action: 'get_profile',
-                    user_id: userId,
-                    days: days
-                })
+                body: JSON.stringify(requestBody)
             });
     
+            console.log('Service Worker: Cognitive API response status:', response.status);
+            console.log('Service Worker: Cognitive API response content-type:', response.headers.get('content-type'));
+    
             if (!response.ok) {
-                throw new Error(`API request failed: ${response.status}`);
+                throw new Error(`API request failed: ${response.status} - ${response.statusText}`);
+            }
+
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.warn('Service Worker: Response is not JSON, content-type:', contentType);
+                throw new Error('API response is not JSON format');
             }
     
-            const profileData = await response.json();
+            const responseText = await response.text();
+            console.log('Service Worker: Cognitive API raw response (first 200 chars):', responseText.substring(0, 200));
+            
+            let profileData;
+            try {
+                profileData = JSON.parse(responseText);
+                console.log('Service Worker: Cognitive profile parsed successfully');
+            } catch (parseError) {
+                console.error('Service Worker: Failed to parse cognitive profile JSON:', parseError);
+                console.error('Service Worker: Response text that failed to parse:', responseText);
+                throw new Error('Invalid JSON response from cognitive API');
+            }
             
             // Cache result
             this.profileCache.set(cacheKey, {
@@ -219,7 +281,8 @@ class CognitiveProfileManager {
             return profileData;
     
         } catch (error) {
-            console.error('Service Worker: Failed to fetch cognitive profile, using demo data:', error);
+            console.error('Service Worker: Failed to fetch cognitive profile, using demo data:', error.message);
+            console.error('Service Worker: Cognitive API endpoint was:', this.cognitiveAPI);
             
             // If failed, return demo data
             const demoData = this.generateDemoData();
@@ -233,21 +296,39 @@ class CognitiveProfileManager {
     }
 
     async recordConceptAnalysis(userId, analysisData) {
+        // Check if cognitive API endpoint is properly configured
+        if (!this.cognitiveAPI || 
+            this.cognitiveAPI === '' || 
+            this.cognitiveAPI.includes('YOUR_COGNITIVE_API_ENDPOINT_HERE') ||
+            this.cognitiveAPI === 'YOUR_COGNITIVE_API_ENDPOINT_HERE') {
+            
+            console.log('Service Worker: Cognitive API endpoint not configured, skipping analysis recording');
+            return;
+        }
+
         try {
+            console.log('Service Worker: Recording cognitive analysis for user:', userId);
             const authToken = await UserManager.getAuthToken();
             
-            await fetch(this.cognitiveAPI, {
+            const requestBody = {
+                action: 'record_analysis',
+                user_id: userId,
+                analysis_data: analysisData
+            };
+            
+            const response = await fetch(this.cognitiveAPI, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': authToken ? `Bearer ${authToken}` : ''
                 },
-                body: JSON.stringify({
-                    action: 'record_analysis',
-                    user_id: userId,
-                    analysis_data: analysisData
-                })
+                body: JSON.stringify(requestBody)
             });
+
+            if (!response.ok) {
+                console.warn('Service Worker: Failed to record cognitive analysis:', response.status, response.statusText);
+                return;
+            }
 
             // Clear related cache
             for (const key of this.profileCache.keys()) {
@@ -259,7 +340,7 @@ class CognitiveProfileManager {
             console.log('Service Worker: Cognitive analysis recorded successfully');
 
         } catch (error) {
-            console.error('Service Worker: Failed to record cognitive analysis:', error);
+            console.error('Service Worker: Failed to record cognitive analysis:', error.message);
         }
     }
 
