@@ -1,7 +1,7 @@
 import json
 import boto3
 import math
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import logging
 
 # Logger configuration
@@ -47,9 +47,9 @@ def handle_semantic_search(body: Dict) -> Dict:
         if not chunks or not query:
             return create_response(400, {'error': 'Missing chunks or query'})
         
-        logger.info(f"Searching among {len(chunks)} chunks for query: {query[:50]}... using Titan v2")
+        logger.info(f"Searching among {len(chunks)} chunks for query: {query[:50]}...")
         
-        # Prepare all texts for batch processing (query + chunks)
+        # Prepare all texts for processing (query + chunks)
         all_texts = [query] + chunks
         
         # Generate embeddings using Titan v2
@@ -83,16 +83,7 @@ def handle_semantic_search(body: Dict) -> Dict:
             'query': query,
             'total_chunks': len(chunks),
             'relevant_chunks': relevant_chunks,
-            'top_similarity': relevant_chunks[0]['similarity'] if relevant_chunks else 0,
-            'batch_processed': False,  # Individual API calls used
-            'cost_optimized': False,   # No batch optimization available
-            'processing_stats': {
-                'chunks_processed': len(chunks),
-                'embeddings_generated': len(chunk_embeddings),
-                'relevant_found': len(relevant_chunks),
-                'api_method': 'Titan v2 Individual API',
-                'note': 'Titan v2 does not support batch API for real-time embedding'
-            }
+            'top_similarity': relevant_chunks[0]['similarity'] if relevant_chunks else 0
         })
         
     except Exception as e:
@@ -111,17 +102,13 @@ def handle_embedding_generation(body: Dict) -> Dict:
         
         logger.info(f"Generating embeddings for {len(texts)} texts using Titan v2")
         
-        # Use Titan v2 for much better cost efficiency
+        # Generate embeddings using Titan v2
         embeddings = generate_batch_embeddings(texts)
         
-        # Convert to list format for JSON serialization
-        embeddings_list = [embedding.tolist() for embedding in embeddings]
-        
         return create_response(200, {
-            'embeddings': embeddings_list,
-            'dimension': 1536,
-            'count': len(embeddings_list),
-            'batch_processed': True
+            'embeddings': embeddings,
+            'dimension': 1024,
+            'count': len(embeddings)
         })
         
     except Exception as e:
@@ -131,7 +118,6 @@ def handle_embedding_generation(body: Dict) -> Dict:
 def generate_batch_embeddings(texts: List[str]) -> List[List[float]]:
     """
     Generate embeddings for multiple texts using individual API calls
-    Note: Titan v2 doesn't support true batch API, so I make individual calls
     """
     try:
         if not texts:
@@ -145,30 +131,27 @@ def generate_batch_embeddings(texts: List[str]) -> List[List[float]]:
             try:
                 embedding = generate_single_embedding(text)
                 all_embeddings.append(embedding)
-                logger.debug(f"Successfully generated embedding {i+1}/{len(texts)}")
                 
             except Exception as single_error:
                 logger.error(f"Embedding generation failed for text {i+1}: {str(single_error)}")
                 all_embeddings.append([0.0] * 1024)  # Zero vector fallback
         
-        logger.info(f"Generated {len(all_embeddings)} total embeddings using individual API calls")
+        logger.info(f"Generated {len(all_embeddings)} embeddings")
         return all_embeddings
         
     except Exception as e:
         logger.error(f"Embedding generation failed: {str(e)}")
-        # Ultimate fallback: return zero vectors
         return [[0.0] * 1024 for _ in texts]
 
 def generate_single_embedding(text: str) -> List[float]:
     """
     Generate single text embedding using Amazon Titan Embeddings v2
-    Used as fallback when Titan v2 is not available
     """
     try:
         # Prepare request body
         request_body = {
             "inputText": text[:8000],  # Titan v2 maximum input length limit
-            "dimensions": 1024,  # Titan Embeddings v2 default dimension
+            "dimensions": 1024,
             "normalize": True
         }
         
@@ -184,7 +167,6 @@ def generate_single_embedding(text: str) -> List[float]:
         response_body = json.loads(response['body'].read())
         embedding = list(response_body['embedding'])
         
-        logger.debug(f"Generated single embedding with length: {len(embedding)}")
         return embedding
         
     except Exception as e:
@@ -193,10 +175,9 @@ def generate_single_embedding(text: str) -> List[float]:
 
 def calculate_cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     """
-    Calculate cosine similarity between two vectors using built-in Python functions
+    Calculate cosine similarity between two vectors
     """
     try:
-        # Ensure vectors are lists
         if len(vec1) != len(vec2):
             logger.error(f"Vector length mismatch: {len(vec1)} vs {len(vec2)}")
             return 0.0
@@ -231,26 +212,4 @@ def create_response(status_code: int, body: Dict) -> Dict:
             'Access-Control-Allow-Methods': 'POST,OPTIONS'
         },
         'body': json.dumps(body, ensure_ascii=False)
-    }
-
-def batch_process_chunks(chunks: List[str], max_batch_size: int = 25) -> List[List[float]]:
-    """
-    Process chunks using Titan v2 for optimal cost efficiency
-    
-    Args:
-        chunks: List of text chunks to process
-        max_batch_size: Maximum number of texts per batch (Titan v2 supports up to 25)
-    
-    Returns:
-        List of embeddings corresponding to input chunks
-    """
-    try:
-        # Use Titan v2 function directly
-        embeddings = generate_batch_embeddings(chunks)
-        logger.info(f"Batch processed {len(chunks)} chunks with cost-optimized Titan v2")
-        return embeddings
-        
-    except Exception as e:
-        logger.error(f"Batch chunk processing failed: {str(e)}")
-        # Return zero vectors as fallback
-        return [[0.0] * 1024 for _ in chunks] 
+    } 
