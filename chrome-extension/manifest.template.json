@@ -4,13 +4,9 @@
   "version": "1.0.0",
   "description": "A browser extension that simplifies reading comprehension in one place",
   "permissions": [
-    "tabs",
     "activeTab",
-    "contextMenus",
     "storage",
-    "scripting",
-    "notifications",
-    "alarms"
+    "notifications"
   ],
   "host_permissions": [
     "https://your-api-gateway.amazonaws.com/*"
