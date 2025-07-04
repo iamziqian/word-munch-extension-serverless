@@ -808,6 +808,24 @@ class WordMunchStack(Stack):
             alarm_description="Alarm when Concept Muncher Lambda invocations exceed 100 in 5 minutes"
         )
 
+        # Semantic Search Lambda Invocations Alarm (excluding warm-up)
+        semantic_search_lambda_invocations_metric = self.semantic_search_lambda.metric_invocations(
+            period=Duration.minutes(5),
+            statistic="Sum",
+            dimensions_map={
+                "warmer": "false"  # Exclude warm-up invocations
+            }
+        )
+        semantic_search_lambda_alarm = cloudwatch.Alarm(
+            self, "SemanticSearchLambdaInvocationsAlarm",
+            metric=semantic_search_lambda_invocations_metric,
+            threshold=50,  # Alarm if more than 50 invocations in 5 minutes (lower threshold due to cost)
+            evaluation_periods=1,
+            datapoints_to_alarm=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm when Semantic Search Lambda invocations exceed 50 in 5 minutes"
+        )
+
         # =========================================================================
         # SNS Topic for Alarm Notifications
         # =========================================================================
@@ -821,6 +839,7 @@ class WordMunchStack(Stack):
         # Bind all alarms to SNS Topic
         word_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
         concept_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+        semantic_search_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
 
         # =========================================================================
         # CloudWatch Dashboard for User Invocation Analytics
@@ -903,6 +922,40 @@ class WordMunchStack(Stack):
             period=Duration.minutes(5)
         )
         
+        # Semantic Search User Invocations Widget (excluding warm-up)
+        semantic_search_user_invocations_widget = cloudwatch.GraphWidget(
+            title="Semantic Search - User Invocations (Excluding Warm-up)",
+            left=[
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Invocations",
+                    dimensions_map={
+                        "FunctionName": self.semantic_search_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="All Invocations"
+                ),
+                cloudwatch.MathExpression(
+                    expression="m1",
+                    label="User Invocations Only",
+                    using_metrics={
+                        "m1": cloudwatch.Metric(
+                            namespace="WordMunch/SemanticSearch",
+                            metric_name="SemanticSearchInvocations",
+                            dimensions_map={
+                                "Service": "semantic-search",
+                                "Environment": self.env_name
+                            },
+                            statistic="Sum"
+                        )
+                    }
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(5)
+        )
+        
         # Lambda Duration Comparison Widget
         lambda_duration_widget = cloudwatch.GraphWidget(
             title="Lambda Function Duration Comparison",
@@ -924,6 +977,15 @@ class WordMunchStack(Stack):
                     },
                     statistic="Average",
                     label="Concept Muncher Avg Duration"
+                ),
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Duration",
+                    dimensions_map={
+                        "FunctionName": self.semantic_search_lambda.function_name
+                    },
+                    statistic="Average",
+                    label="Semantic Search Avg Duration"
                 )
             ],
             width=12,
@@ -952,6 +1014,15 @@ class WordMunchStack(Stack):
                     },
                     statistic="Sum",
                     label="Concept Muncher Errors"
+                ),
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Errors",
+                    dimensions_map={
+                        "FunctionName": self.semantic_search_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="Semantic Search Errors"
                 )
             ],
             width=12,
@@ -996,13 +1067,55 @@ class WordMunchStack(Stack):
             period=Duration.minutes(15)
         )
         
+        # Semantic Search Specific Metrics Widget
+        semantic_search_stats_widget = cloudwatch.GraphWidget(
+            title="Semantic Search - User Types & Rate Limiting",
+            left=[
+                cloudwatch.Metric(
+                    namespace="WordMunch/SemanticSearch",
+                    metric_name="AnonymousUsers",
+                    dimensions_map={
+                        "Service": "semantic-search",
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Anonymous User Searches"
+                ),
+                cloudwatch.Metric(
+                    namespace="WordMunch/SemanticSearch",
+                    metric_name="RegisteredUsers",
+                    dimensions_map={
+                        "Service": "semantic-search",
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Registered User Searches"
+                ),
+                cloudwatch.Metric(
+                    namespace="WordMunch/SemanticSearch",
+                    metric_name="RateLimitHits",
+                    dimensions_map={
+                        "Service": "semantic-search",
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Rate Limit Hits (Anonymous)"
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(15)
+        )
+        
         # Add widgets to dashboard
         dashboard.add_widgets(
             word_muncher_user_invocations_widget,
             concept_muncher_user_invocations_widget,
+            semantic_search_user_invocations_widget,
             lambda_duration_widget,
             lambda_errors_widget,
-            usage_stats_widget
+            usage_stats_widget,
+            semantic_search_stats_widget
         )
         
         # Add tags to dashboard
