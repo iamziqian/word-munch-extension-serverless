@@ -138,6 +138,8 @@ const state = new ContentScriptState();
 class EventManager {
     constructor() {
         this.selectionTimer = null;
+        this.creatingIndependentWindow = false;
+        this.lastProcessedEvent = null;
         this.setupMainListeners();
     }
 
@@ -154,13 +156,49 @@ class EventManager {
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
         
-        console.log('Word Munch: Text selection event triggered, selected text:', selectedText);
+        console.log('Word Munch: Text selection event triggered, selected text:', selectedText, 'Event type:', event.type);
 
         // Check if this is triggered by independent widget button click
         if (window._wordMunchIndependentButtonClick) {
             console.log('Word Munch: Ignoring text selection during independent widget button click');
                 return;
             }
+
+        // CRITICAL: Prevent duplicate processing from multiple event types
+        const currentTime = Date.now();
+        const eventKey = `${selectedText}_${currentTime}`;
+        
+        if (this.lastProcessedEvent && currentTime - this.lastProcessedEvent.time < 100 && this.lastProcessedEvent.text === selectedText) {
+            console.log('Word Munch: Duplicate event within 100ms for same text, ignoring:', event.type);
+            return;
+        }
+        
+        this.lastProcessedEvent = {
+            text: selectedText,
+            time: currentTime,
+            type: event.type
+        };
+
+        // CRITICAL: Check if concept muncher input is currently focused
+        if (window._conceptMuncherInputFocused) {
+            console.log('Word Munch: Concept muncher input is focused, ignoring text selection event');
+            return;
+        }
+
+        // CRITICAL: Check if selection is happening inside concept muncher window
+        if (state.isConceptMode && state.floatingWidget) {
+            const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            if (range) {
+                const container = range.commonAncestorContainer;
+                const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+                
+                // Check if the selection is within the concept muncher window
+                if (state.floatingWidget.contains(element)) {
+                    console.log('Word Munch: Text selection is within concept muncher window, ignoring global handler');
+                    return;
+                }
+            }
+        }
 
         // Relax the conditions, allowing any valid word to create an independent window in concept mode.
         if (state.isConceptMode && selectedText && TextValidator.isValidWord(selectedText)) {
@@ -173,7 +211,15 @@ class EventManager {
                 console.log('Word Munch: Cleared pending selection timer in concept mode');
             }
             
+            // Mark that we're creating an independent window to prevent other processing
+            this.creatingIndependentWindow = true;
             WidgetManager.createIndependentWordWindow(selectedText, selection);
+            
+            // Clear the flag after a short delay
+            setTimeout(() => {
+                this.creatingIndependentWindow = false;
+            }, 100);
+            
             return;
         }
         
@@ -209,7 +255,7 @@ class EventManager {
         // Process empty selection - but avoid triggering when normal selection is happening
         if (!selectedText || selectedText.length === 0) {
             // Only close the floating widget when not in understanding analysis mode and no selection is being processed
-            if (!state.isConceptMode && !state.currentSelection) {
+            if (!state.isConceptMode && !state.currentSelection && !window._conceptMuncherInputFocused) {
                 console.log('Word Munch: Empty selection, close floating widget');
                 WidgetManager.closeFloatingWidget();
             }
@@ -250,10 +296,25 @@ class EventManager {
             return;
         }
         
+        // CRITICAL: Check if we're currently creating an independent window
+        if (this.creatingIndependentWindow) {
+            console.log('Word Munch: Currently creating independent window in reader mode, skip processing');
+            return;
+        }
+        
         // Check concept mode in reading mode too
         if (state.isConceptMode && selectedText && TextValidator.isValidWord(selectedText)) {
             console.log('Word Munch: In reader mode + concept mode, create independent word window for:', selectedText);
+            
+            // Mark that we're creating an independent window
+            this.creatingIndependentWindow = true;
             WidgetManager.createIndependentWordWindow(selectedText, selection);
+            
+            // Clear the flag after a short delay
+            setTimeout(() => {
+                this.creatingIndependentWindow = false;
+            }, 100);
+            
             return;
         }
         
@@ -275,6 +336,12 @@ class EventManager {
         // Check extension status again (prevent state change during debounce delay)
         if (!state.extensionSettings.extensionEnabled) {
             console.log('Word Munch: Extension disabled during processing, cancel processing');
+            return;
+        }
+        
+        // CRITICAL: Check if we're currently creating an independent window
+        if (eventManager.creatingIndependentWindow) {
+            console.log('Word Munch: Currently creating independent window, skip processing to avoid duplicates');
             return;
         }
         
@@ -309,8 +376,14 @@ class EventManager {
             console.log('Word Munch: Identified as sentence but concept analysis disabled, use word mode');
             WidgetManager.showFloatingWidget(text, selection, 'sentence');
         } else {
-            console.log('Word Munch: Invalid text, close window');
-            WidgetManager.closeFloatingWidget();
+            console.log('Word Munch: Invalid text');
+            // Don't close concept window for invalid selections when in concept mode
+            if (!state.isConceptMode) {
+                console.log('Word Munch: Not in concept mode, close window');
+                WidgetManager.closeFloatingWidget();
+            } else {
+                console.log('Word Munch: In concept mode, keep window open despite invalid selection');
+            }
         }
     }
 
@@ -897,11 +970,30 @@ class WidgetManager {
                 }
             });
             
+            // Prevent text selection events within textarea from bubbling up
+            understandingInput.addEventListener('mouseup', (e) => {
+                e.stopPropagation();
+                console.log('Word Munch: Text selection within understanding input prevented from bubbling');
+            });
+            
+            understandingInput.addEventListener('keyup', (e) => {
+                e.stopPropagation();
+            });
+            
+            understandingInput.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+            });
+            
+            // Temporarily disable global text selection when focusing on input
             understandingInput.addEventListener('focus', () => {
+                console.log('Word Munch: Understanding input focused, disabling global text selection');
                 eventManager.removeOutsideClickListener();
+                window._conceptMuncherInputFocused = true;
             });
             
             understandingInput.addEventListener('blur', () => {
+                console.log('Word Munch: Understanding input blurred, re-enabling global text selection');
+                window._conceptMuncherInputFocused = false;
                 setTimeout(() => {
                     if (state.floatingWidget && state.isConceptMode) {
                         eventManager.addOutsideClickListener();
@@ -933,6 +1025,9 @@ class WidgetManager {
         state.cancelCurrentRequest();
         eventManager.removeOutsideClickListener();
         HighlightManager.clearOriginalHighlights();
+        
+        // Clear concept muncher input focus flag
+        window._conceptMuncherInputFocused = false;
         
         if (state.floatingWidget) {
             state.floatingWidget.classList.remove('show');
