@@ -1,5 +1,7 @@
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Word Munch: Popup script loaded');
+    
     const extensionToggle = document.getElementById('extension-toggle');
     const outputLanguage = document.getElementById('output-language');
     const status = document.getElementById('status');
@@ -33,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
     
     // Initialize user-related features
-    // initializeUser();
+    initializeUser();
     
     // Load statistics
     loadStatistics();
@@ -107,72 +109,349 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Initialize user features
-    // function initializeUser() {
-    //     const loginBtn = document.getElementById('login-btn');
-    //     const registerBtn = document.getElementById('register-btn');
-    //     const logoutBtn = document.getElementById('logout-btn');
+    function initializeUser() {
+        // Tab switching
+        const loginTab = document.getElementById('login-tab');
+        const registerTab = document.getElementById('register-tab');
+        const loginContent = document.getElementById('login-content');
+        const registerContent = document.getElementById('register-content');
         
-    //     if (loginBtn) {
-    //         loginBtn.addEventListener('click', handleLogin);
-    //     }
-    //     if (registerBtn) {
-    //         registerBtn.addEventListener('click', () => showMessage('Registration function not implemented yet', 'info'));
-    //     }
-    //     if (logoutBtn) {
-    //         logoutBtn.addEventListener('click', handleLogout);
-    //     }
+        if (loginTab && registerTab) {
+            loginTab.addEventListener('click', () => switchTab('login'));
+            registerTab.addEventListener('click', () => switchTab('register'));
+        }
         
-    //     // Load user status
-    //     loadUserInfo();
-    // }
+        // Login functionality
+        const loginBtn = document.getElementById('login-btn');
+        if (loginBtn) {
+            loginBtn.addEventListener('click', handleLogin);
+        }
+        
+        // Register functionality  
+        const registerBtn = document.getElementById('register-btn');
+        if (registerBtn) {
+            registerBtn.addEventListener('click', handleRegister);
+        }
+        
+        // Logout functionality
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', handleLogout);
+        }
+        
+        // Cognitive dashboard button
+        const cognitiveBtn = document.getElementById('cognitive-dashboard-btn');
+        if (cognitiveBtn) {
+            cognitiveBtn.addEventListener('click', showCognitiveDashboard);
+        }
+        
+        // Forgot password link
+        const forgotLink = document.getElementById('forgot-password-link');
+        if (forgotLink) {
+            forgotLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleForgotPassword();
+            });
+        }
+        
+        // Password confirmation validation
+        const confirmPassword = document.getElementById('register-confirm');
+        if (confirmPassword) {
+            confirmPassword.addEventListener('input', validatePasswordMatch);
+        }
+        
+        // Load user status
+        loadUserInfo();
+    }
+    
+    // Switch between login and register tabs
+    function switchTab(tab) {
+        const loginTab = document.getElementById('login-tab');
+        const registerTab = document.getElementById('register-tab');
+        const loginContent = document.getElementById('login-content');
+        const registerContent = document.getElementById('register-content');
+        
+        // Update tab buttons
+        loginTab.classList.toggle('active', tab === 'login');
+        registerTab.classList.toggle('active', tab === 'register');
+        
+        // Update tab content
+        loginContent.classList.toggle('active', tab === 'login');
+        registerContent.classList.toggle('active', tab === 'register');
+        
+        // Clear any error messages
+        clearFormErrors();
+    }
+    
+    // Validate password match
+    function validatePasswordMatch() {
+        const password = document.getElementById('register-password');
+        const confirm = document.getElementById('register-confirm');
+        
+        if (password && confirm && confirm.value) {
+            if (password.value !== confirm.value) {
+                confirm.setCustomValidity('Passwords do not match');
+            } else {
+                confirm.setCustomValidity('');
+            }
+        }
+    }
+    
+    // Clear form errors
+    function clearFormErrors() {
+        const inputs = document.querySelectorAll('.input-field');
+        inputs.forEach(input => {
+            input.setCustomValidity('');
+            input.classList.remove('error');
+        });
+    }
+    
+    // Handle user registration
+    async function handleRegister() {
+        const nameInput = document.getElementById('register-name');
+        const emailInput = document.getElementById('register-email');
+        const passwordInput = document.getElementById('register-password');
+        const confirmInput = document.getElementById('register-confirm');
+        const registerBtn = document.getElementById('register-btn');
+        
+        // Validate inputs
+        if (!nameInput?.value?.trim()) {
+            showMessage('Please enter your full name', 'error');
+            nameInput?.focus();
+            return;
+        }
+        
+        if (!emailInput?.value?.trim()) {
+            showMessage('Please enter your email address', 'error');
+            emailInput?.focus();
+            return;
+        }
+        
+        if (!isValidEmail(emailInput.value.trim())) {
+            showMessage('Please enter a valid email address', 'error');
+            emailInput?.focus();
+            return;
+        }
+        
+        if (!passwordInput?.value || passwordInput.value.length < 8) {
+            showMessage('Password must be at least 8 characters long', 'error');
+            passwordInput?.focus();
+            return;
+        }
+        
+        if (passwordInput.value !== confirmInput?.value) {
+            showMessage('Passwords do not match', 'error');
+            confirmInput?.focus();
+            return;
+        }
+        
+        // Show loading state
+        registerBtn.classList.add('loading');
+        registerBtn.disabled = true;
+        
+        try {
+            const userData = {
+                name: nameInput.value.trim(),
+                email: emailInput.value.trim(),
+                password: passwordInput.value
+            };
+            
+            // Call registration API
+            const result = await callAuthAPI('register', userData);
+            
+            if (result.success) {
+                // Save user info
+                await chrome.storage.sync.set({
+                    userEmail: result.user.email,
+                    userName: result.user.name,
+                    userToken: result.token,
+                    userId: result.user.id
+                });
+                
+                showMessage('Account created successfully! Welcome!', 'success');
+                loadUserInfo();
+                
+                // Clear form
+                nameInput.value = '';
+                emailInput.value = '';
+                passwordInput.value = '';
+                confirmInput.value = '';
+                
+            } else {
+                throw new Error(result.error || 'Registration failed');
+            }
+            
+        } catch (error) {
+            console.error('Registration error:', error);
+            showMessage(error.message || 'Registration failed. Please try again.', 'error');
+        } finally {
+            registerBtn.classList.remove('loading');
+            registerBtn.disabled = false;
+        }
+    }
     
     // Handle login
-    function handleLogin() {
-        const emailInput = document.getElementById('email-input');
-        const passwordInput = document.getElementById('password-input');
+    async function handleLogin() {
+        const emailInput = document.getElementById('login-email');
+        const passwordInput = document.getElementById('login-password');
+        const loginBtn = document.getElementById('login-btn');
         
-        if (!emailInput?.value || !passwordInput?.value) {
+        if (!emailInput?.value?.trim() || !passwordInput?.value) {
             showMessage('Please fill in email and password', 'error');
             return;
         }
         
-        const email = emailInput.value.trim();
+        if (!isValidEmail(emailInput.value.trim())) {
+            showMessage('Please enter a valid email address', 'error');
+            emailInput?.focus();
+            return;
+        }
         
-        // Simulate login
-        chrome.storage.sync.set({
-            userEmail: email,
-            userToken: 'mock_token_' + Date.now()
-        }, function() {
-            showMessage('Login successful', 'success');
+        // Show loading state
+        loginBtn.classList.add('loading');
+        loginBtn.disabled = true;
+        
+        try {
+            const loginData = {
+                email: emailInput.value.trim(),
+                password: passwordInput.value
+            };
+        
+            // Call login API
+            const result = await callAuthAPI('login', loginData);
+            
+            if (result.success) {
+                // Save user info
+                await chrome.storage.sync.set({
+                    userEmail: result.user.email,
+                    userName: result.user.name,
+                    userToken: result.token,
+                    userId: result.user.id
+                });
+                
+                showMessage('Welcome back!', 'success');
             loadUserInfo();
-        });
+                
+                // Clear form
+                emailInput.value = '';
+                passwordInput.value = '';
+                
+            } else {
+                throw new Error(result.error || 'Login failed');
+            }
+            
+        } catch (error) {
+            console.error('Login error:', error);
+            const userFriendlyMessage = error.message.includes('Invalid email or password')
+                ? 'Invalid email or password. Please try again.'
+                : 'Login failed. Please check your credentials.';
+            showMessage(userFriendlyMessage, 'error');
+        } finally {
+            loginBtn.classList.remove('loading');
+            loginBtn.disabled = false;
+        }
     }
     
     // Handle logout
-    function handleLogout() {
-        chrome.storage.sync.remove(['userEmail', 'userToken'], function() {
-            showMessage('Logged out successfully', 'success');
+    async function handleLogout() {
+        try {
+            await chrome.storage.sync.remove(['userEmail', 'userName', 'userToken', 'userId']);
+            showMessage('Signed out successfully', 'success');
             loadUserInfo();
+        } catch (error) {
+            console.error('Logout error:', error);
+            showMessage('Logout failed', 'error');
+        }
+    }
+    
+    // Show cognitive dashboard
+    async function showCognitiveDashboard() {
+        try {
+            // Get current active tab
+            const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+            if (tabs[0]) {
+                // Send message to content script to show dashboard
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    type: 'SHOW_COGNITIVE_DASHBOARD'
+                }, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.error('Dashboard message error:', chrome.runtime.lastError.message);
+                        if (chrome.runtime.lastError.message.includes('Could not establish connection')) {
+                            showMessage('Please refresh the page and try again', 'error');
+                        } else {
+                            showMessage('Failed to open dashboard', 'error');
+                        }
+                    } else {
+                        console.log('Dashboard message sent successfully');
+                        window.close(); // Close popup after opening dashboard
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to show cognitive dashboard:', error);
+            showMessage('Failed to open dashboard', 'error');
+        }
+    }
+    
+    // Validate email format
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+    
+    // Call authentication API
+    async function callAuthAPI(action, data) {
+        // Get API configuration
+        const config = await chrome.storage.sync.get(['apiConfig']);
+        
+        if (!config.apiConfig?.USER_API_ENDPOINT) {
+            throw new Error('User API not configured. Please check extension settings.');
+        }
+        
+        const response = await fetch(config.apiConfig.USER_API_ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: action,
+                ...data
+            })
         });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API Error: ${response.status} - ${errorText}`);
+        }
+        
+        return await response.json();
     }
     
     // Load user information
     function loadUserInfo() {
         if (!chrome?.storage) return;
         
-        chrome.storage.sync.get(['userEmail', 'userToken'], function(result) {
+        chrome.storage.sync.get(['userEmail', 'userName', 'userToken'], function(result) {
             const loginForm = document.getElementById('login-form');
             const userInfo = document.getElementById('user-info');
             const userEmail = document.getElementById('user-email');
+            const userName = document.getElementById('user-name');
             const userAvatarText = document.getElementById('user-avatar-text');
             
             if (result.userEmail && result.userToken) {
+                // User is logged in
                 if (loginForm) loginForm.style.display = 'none';
                 if (userInfo) userInfo.style.display = 'flex';
+                
                 if (userEmail) userEmail.textContent = result.userEmail;
-                if (userAvatarText) userAvatarText.textContent = result.userEmail.charAt(0).toUpperCase();
+                if (userName) userName.textContent = result.userName || 'User';
+                if (userAvatarText) {
+                    const name = result.userName || result.userEmail;
+                    userAvatarText.textContent = name.charAt(0).toUpperCase();
+                }
             } else {
-                if (loginForm) loginForm.style.display = 'flex';
+                // User is not logged in
+                if (loginForm) loginForm.style.display = 'block';
                 if (userInfo) userInfo.style.display = 'none';
             }
         });
@@ -289,5 +568,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log('Word Munch: Select focus mode:', mode);
+    }
+
+    async function handleForgotPassword() {
+        showMessage('The "Forgot Password" feature is not yet implemented. Please check back later.', 'info');
     }
 });

@@ -93,26 +93,54 @@
             </div>
             
             <!-- User login status -->
-            <!-- <div class="control-section" id="user-section">
-                <h3 class="section-title">User status</h3>
+            <div class="control-section" id="user-section">
+                <h3 class="section-title">Account</h3>
+                
+                <!-- Login Form -->
                 <div id="login-form" class="login-form">
-                    <input type="email" id="email-input" placeholder="邮箱地址" class="input-field">
-                    <input type="password" id="password-input" placeholder="密码" class="input-field">
-                    <div class="login-buttons">
-                        <button id="login-btn" class="btn btn-primary">登录</button>
-                        <button id="register-btn" class="btn btn-secondary">注册</button>
+                    <div class="form-tabs">
+                        <button id="login-tab" class="tab-btn active" data-tab="login">Sign In</button>
+                        <button id="register-tab" class="tab-btn" data-tab="register">Sign Up</button>
+                    </div>
+                    
+                    <!-- Login Tab -->
+                    <div id="login-content" class="tab-content active">
+                        <input type="email" id="login-email" placeholder="Email address" class="input-field">
+                        <input type="password" id="login-password" placeholder="Password" class="input-field">
+                        <button id="login-btn" class="btn btn-primary">Sign In</button>
+                        <div class="auth-links">
+                            <a href="#" id="forgot-password-link">Forgot password?</a>
+                        </div>
+                    </div>
+                    
+                    <!-- Register Tab -->
+                    <div id="register-content" class="tab-content">
+                        <input type="text" id="register-name" placeholder="Full name" class="input-field">
+                        <input type="email" id="register-email" placeholder="Email address" class="input-field">
+                        <input type="password" id="register-password" placeholder="Password (8+ characters)" class="input-field">
+                        <input type="password" id="register-confirm" placeholder="Confirm password" class="input-field">
+                        <button id="register-btn" class="btn btn-primary">Create Account</button>
+                        <div class="auth-disclaimer">
+                            <small>By creating an account, you agree to our Terms of Service and Privacy Policy</small>
+                        </div>
                     </div>
                 </div>
+                
+                <!-- User Info (when logged in) -->
                 <div id="user-info" class="user-info" style="display: none;">
                     <div class="user-avatar">
                         <span id="user-avatar-text">U</span>
                     </div>
                     <div class="user-details">
+                        <div id="user-name" class="user-name">User Name</div>
                         <div id="user-email" class="user-email">user@example.com</div>
-                        <button id="logout-btn" class="btn btn-small">退出登录</button>
+                        <div class="user-actions">
+                            <button id="cognitive-dashboard-btn" class="btn btn-secondary">📊 My Progress</button>
+                            <button id="logout-btn" class="btn btn-small">Sign Out</button>
+                        </div>
                     </div>
                 </div>
-            </div> -->
+            </div>
             
             <!-- Statistics -->
             <div class="control-section">
