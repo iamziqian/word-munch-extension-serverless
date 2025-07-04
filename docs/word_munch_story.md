@@ -77,9 +77,9 @@ Result: **Seamless flow + better retention + genuine understanding.**
 **Result:** 898ms → 287ms (68% faster)
 
 ### Cost Efficiency
-**Total monthly cost:** $0.30 (including warming)
-**Per-session cost:** $0.06 vs $0.40 traditional infrastructure
-**ROI:** 85% cost reduction + 68% performance gain
+- **Total monthly cost:** $0.30 (including warming)
+- **Per-session cost:** $0.06 vs $0.40 traditional infrastructure
+- **ROI:** 85% cost reduction + 68% performance gain
 
 ### AI Model Optimization
 **Smart tiering** → right model for each cognitive task:
