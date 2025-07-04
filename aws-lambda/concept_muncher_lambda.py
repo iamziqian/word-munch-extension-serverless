@@ -6,9 +6,9 @@ import re
 import os
 import threading
 import logging
+import datetime
 from typing import List, Dict, Tuple, Any
 from decimal import Decimal
-
 
 # Configure logging
 logger = logging.getLogger()
@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 # Global variables for lazy loading - initialized as None
 _bedrock_client = None
 _dynamodb_resource = None
-_lambda_client = None
+_sqs_client = None
 _cache_table = None
 
 def get_bedrock_client():
@@ -38,14 +38,14 @@ def get_dynamodb_resource():
         logger.info("DynamoDB resource initialized successfully")
     return _dynamodb_resource
 
-def get_lambda_client():
-    """Lazy load Lambda client with connection reuse"""
-    global _lambda_client
-    if _lambda_client is None:
-        logger.info("Initializing Lambda client (lazy loading)...")
-        _lambda_client = boto3.client('lambda', region_name='us-east-1')
-        logger.info("Lambda client initialized successfully")
-    return _lambda_client
+def get_sqs_client():
+    """Lazy load SQS client with connection reuse"""
+    global _sqs_client
+    if _sqs_client is None:
+        logger.info("Initializing SQS client (lazy loading)...")
+        _sqs_client = boto3.client('sqs', region_name='us-east-1')
+        logger.info("SQS client initialized successfully")
+    return _sqs_client
 
 def get_cache_table():
     """Lazy load cache table with connection reuse"""
@@ -70,7 +70,7 @@ def warm_up_function():
         # Initialize all clients (lazy loading) - this is all we need
         bedrock_client = get_bedrock_client()
         dynamodb_resource = get_dynamodb_resource()
-        lambda_client = get_lambda_client()
+        sqs_client = get_sqs_client()
         cache_table = get_cache_table()
         
         # Skip all test operations to minimize warm-up time and cost
@@ -86,29 +86,47 @@ def warm_up_function():
         return False
 
 def record_cognitive_data_async(user_id: str, analysis_data: Dict):
-    """Asynchronously record cognitive data to the cognitive profile service"""
+    """Asynchronously record cognitive data via SQS to the cognitive profile service"""
     def make_request():
         try:
-            # Use lazy-loaded Lambda client
-            lambda_client = get_lambda_client()
+            # Use lazy-loaded SQS client
+            sqs_client = get_sqs_client()
             
-            payload = {
+            # Get SQS queue URL from environment
+            queue_url = os.environ.get('COGNITIVE_QUEUE_URL')
+            if not queue_url:
+                logger.warning("COGNITIVE_QUEUE_URL environment variable not set")
+                return
+            
+            # Prepare message for SQS
+            message_body = {
                 'action': 'record_analysis',
                 'user_id': user_id,
-                'analysis_data': analysis_data
+                'analysis_data': analysis_data,
+                'timestamp': int(time.time()),
+                'source': 'concept-muncher'
             }
             
-            # Invoke cognitive profile Lambda asynchronously
-            lambda_client.invoke(
-                FunctionName='cognitive-profile-lambda',  # Your cognitive Lambda function name
-                InvocationType='Event',  # Async invocation
-                Payload=json.dumps(payload)
+            # Send message to SQS queue
+            response = sqs_client.send_message(
+                QueueUrl=queue_url,
+                MessageBody=json.dumps(message_body, ensure_ascii=False),
+                MessageAttributes={
+                    'action': {
+                        'StringValue': 'record_analysis',
+                        'DataType': 'String'
+                    },
+                    'user_id': {
+                        'StringValue': user_id,
+                        'DataType': 'String'
+                    }
+                }
             )
             
-            logger.info(f"Cognitive data sent for user {user_id}")
+            logger.info(f"Cognitive data sent to SQS for user {user_id}, MessageId: {response.get('MessageId')}")
             
         except Exception as e:
-            logger.warning(f"Failed to send cognitive data: {e}")
+            logger.warning(f"Failed to send cognitive data to SQS: {e}")
     
     # Run in background thread to not block response
     thread = threading.Thread(target=make_request)
@@ -838,6 +856,27 @@ def lambda_handler(event, context):
                 })
             }
         
+        # Check anonymous user rate limiting
+        user_id = extract_user_id_from_event(event)
+        if is_anonymous_user(event):
+            rate_limit_result = check_anonymous_user_rate_limit(user_id)
+            if not rate_limit_result['allowed']:
+                return {
+                    'statusCode': 429,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'error': 'Daily usage limit exceeded',
+                        'message': 'Anonymous users are limited to 5 concept analyses per day',
+                        'usage_count': rate_limit_result['current_count'],
+                        'limit': rate_limit_result['daily_limit'],
+                        'reset_time': rate_limit_result['reset_time'],
+                        'error_code': 'RATE_LIMIT_EXCEEDED'
+                    })
+                }
+        
         # Simplified security validation - align with frontend limits
         # Frontend validates: ≥6 words, ≤1000 chars, valid content
         word_count = len(original_text.split())
@@ -925,9 +964,12 @@ def lambda_handler(event, context):
             except Exception as e:
                 logger.error(f"Claude feedback failed: {e}")
 
+        # Record usage for anonymous users (after successful analysis)
+        if is_anonymous_user(event):
+            record_anonymous_user_usage(user_id)
+
         # Record cognitive data asynchronously
         try:
-            user_id = extract_user_id_from_event(event)
             if user_id:
                 # Prepare comprehensive analysis data for cognitive profiling
                 cognitive_analysis_data = {
@@ -981,8 +1023,157 @@ def extract_user_id_from_event(event):
     headers = event.get('headers', {})
     auth_header = headers.get('Authorization', '')
     
+    # For registered users, use JWT token
     if auth_header.startswith('Bearer '):
         return 'user_' + hashlib.md5(auth_header.encode()).hexdigest()[:8]
     
-    user_ip = headers.get('X-Forwarded-For', headers.get('X-Real-IP', 'unknown'))
-    return 'user_' + hashlib.md5(user_ip.encode()).hexdigest()[:8]
+    # For anonymous users, try to get client-generated anonymous ID from request body
+    try:
+        if isinstance(event.get('body'), str):
+            body = json.loads(event['body'])
+        else:
+            body = event.get('body', {})
+        
+        # Check if frontend provided anonymous_user_id
+        anonymous_id = body.get('anonymous_user_id')
+        if anonymous_id and isinstance(anonymous_id, str) and len(anonymous_id) > 0:
+            # Validate and sanitize the anonymous ID
+            clean_id = ''.join(c for c in anonymous_id if c.isalnum() or c in '-_')[:50]
+            if len(clean_id) >= 8:  # Minimum length requirement
+                return f'anon_{clean_id}'
+        
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+    
+    # Fallback: use a combination of User-Agent and other stable headers
+    user_agent = headers.get('User-Agent', 'unknown')
+    accept_language = headers.get('Accept-Language', '')
+    accept_encoding = headers.get('Accept-Encoding', '')
+    
+    # Create a more stable fingerprint
+    fingerprint_data = f"{user_agent}|{accept_language}|{accept_encoding}"
+    fingerprint_hash = hashlib.md5(fingerprint_data.encode()).hexdigest()[:12]
+    
+    return f'anon_{fingerprint_hash}'
+
+def is_anonymous_user(event):
+    """Check if the user is anonymous (no Authorization header)"""
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    # Primary check: no Bearer token
+    if auth_header.startswith('Bearer '):
+        return False
+    
+    # Secondary check: if anonymous_user_id is provided in request body
+    try:
+        if isinstance(event.get('body'), str):
+            body = json.loads(event['body'])
+        else:
+            body = event.get('body', {})
+        
+        anonymous_id = body.get('anonymous_user_id')
+        if anonymous_id and isinstance(anonymous_id, str):
+            return True  # Has anonymous ID, definitely anonymous
+            
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+    
+    return True  # Default to anonymous if no Bearer token
+
+def check_anonymous_user_rate_limit(user_id):
+    """Check if anonymous user has exceeded daily rate limit"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, allowing request")
+            return {'allowed': True, 'current_count': 0, 'daily_limit': 5, 'reset_time': get_tomorrow_timestamp()}
+        
+        # Generate today's rate limit key
+        today = time.strftime('%Y-%m-%d')
+        rate_limit_key = f"rate_limit_anonymous_{user_id}_{today}"
+        
+        # Try to get current usage count
+        response = cache_table.get_item(Key={'cacheKey': rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        daily_limit = 5
+        allowed = current_count < daily_limit
+        
+        logger.info(f"Anonymous user {user_id[:8]}... usage check: {current_count}/{daily_limit}")
+        
+        return {
+            'allowed': allowed,
+            'current_count': current_count,
+            'daily_limit': daily_limit,
+            'reset_time': get_tomorrow_timestamp()
+        }
+        
+    except Exception as e:
+        logger.error(f"Rate limit check failed for user {user_id}: {e}")
+        # On error, allow the request but log the issue
+        return {'allowed': True, 'current_count': 0, 'daily_limit': 5, 'reset_time': get_tomorrow_timestamp()}
+
+def record_anonymous_user_usage(user_id):
+    """Record usage for anonymous user"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, cannot record usage")
+            return
+        
+        # Generate today's rate limit key
+        today = time.strftime('%Y-%m-%d')
+        rate_limit_key = f"rate_limit_anonymous_{user_id}_{today}"
+        
+        # Try to get current usage count
+        response = cache_table.get_item(Key={'cacheKey': rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        # Increment count
+        new_count = current_count + 1
+        
+        # Calculate TTL for tomorrow midnight (auto cleanup)
+        tomorrow_timestamp = get_tomorrow_timestamp()
+        
+        # Store updated count
+        cache_table.put_item(
+            Item={
+                'cacheKey': rate_limit_key,
+                'data': json.dumps({
+                    'count': new_count,
+                    'user_id': user_id,
+                    'date': today,
+                    'last_used': int(time.time())
+                }, ensure_ascii=False),
+                'ttl': tomorrow_timestamp,
+                'timestamp': int(time.time()),
+                'provider': 'rate_limiter',
+                'model': 'anonymous_daily_limit'
+            }
+        )
+        
+        logger.info(f"Recorded usage for anonymous user {user_id[:8]}...: {new_count}/5")
+        
+    except Exception as e:
+        logger.warning(f"Failed to record usage for anonymous user {user_id}: {e}")
+
+def get_tomorrow_timestamp():
+    """Get timestamp for tomorrow midnight (for TTL)"""
+    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
+    tomorrow_midnight = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(tomorrow_midnight.timestamp())
