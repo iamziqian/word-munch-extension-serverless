@@ -156,13 +156,25 @@ class EventManager {
         
         console.log('Word Munch: Text selection event triggered, selected text:', selectedText);
 
-        // Fast processing of word selection in understanding analysis mode
-        if (state.isConceptMode && state.highlightRanges && state.highlightRanges.length > 0) {
-            if (selectedText && TextValidator.isValidWord(selectedText)) {
-                console.log('Word Munch: Select word in highlight area, create independent word window');
-                WidgetManager.createIndependentWordWindow(selectedText, selection);
+        // Check if this is triggered by independent widget button click
+        if (window._wordMunchIndependentButtonClick) {
+            console.log('Word Munch: Ignoring text selection during independent widget button click');
                 return;
             }
+
+        // Relax the conditions, allowing any valid word to create an independent window in concept mode.
+        if (state.isConceptMode && selectedText && TextValidator.isValidWord(selectedText)) {
+            console.log('Word Munch: In concept mode, create independent word window for:', selectedText);
+            
+            // CRITICAL: Clear any pending selection timer to prevent duplicate processing
+            if (this.selectionTimer) {
+                clearTimeout(this.selectionTimer);
+                this.selectionTimer = null;
+                console.log('Word Munch: Cleared pending selection timer in concept mode');
+            }
+            
+            WidgetManager.createIndependentWordWindow(selectedText, selection);
+            return;
         }
         
         // Check if in reading mode
@@ -238,6 +250,13 @@ class EventManager {
             return;
         }
         
+        // Check concept mode in reading mode too
+        if (state.isConceptMode && selectedText && TextValidator.isValidWord(selectedText)) {
+            console.log('Word Munch: In reader mode + concept mode, create independent word window for:', selectedText);
+            WidgetManager.createIndependentWordWindow(selectedText, selection);
+            return;
+        }
+        
         // Use normal processing logic in reading mode
         this.processTextSelection({
             text: selectedText,
@@ -256,6 +275,13 @@ class EventManager {
         // Check extension status again (prevent state change during debounce delay)
         if (!state.extensionSettings.extensionEnabled) {
             console.log('Word Munch: Extension disabled during processing, cancel processing');
+            return;
+        }
+        
+        // CRITICAL FIX: If in concept mode and this is a valid word, skip processing
+        // because independent window should have already been created
+        if (state.isConceptMode && TextValidator.isValidWord(text)) {
+            console.log('Word Munch: In concept mode with valid word, skip processing (independent window should exist)');
             return;
         }
         
@@ -398,6 +424,15 @@ class EventManager {
         if (state.floatingWidget.contains(event.target)) {
             console.log('Word Munch: Click inside floating widget, do not close');
             return;
+        }
+        
+        // CRITICAL FIX: Check if clicked inside any independent widget
+        const independentWidgets = document.querySelectorAll('.independent-widget');
+        for (const widget of independentWidgets) {
+            if (widget.contains(event.target)) {
+                console.log('Word Munch: Click inside independent widget, do not close concept window');
+                return;
+            }
         }
         
         // Special check: if in understanding analysis mode, ensure clicks on input fields do not close the window
@@ -927,25 +962,558 @@ class WidgetManager {
 
     static createIndependentWordWindow(selectedText, selection) {
         // Create independent word window for understanding analysis mode
+        console.log('Word Munch: Creating independent word window for:', selectedText);
+        
+        // Check if an independent window for the same word already exists to prevent duplicates
+        const existingIndependentWidget = document.querySelector('.independent-widget .wm-header-text');
+        if (existingIndependentWidget) {
+            const existingText = existingIndependentWidget.textContent.replace(/[📝"]/g, '').replace(/\.\.\.$/, '').trim();
+            if (existingText === selectedText || selectedText.includes(existingText)) {
+                console.log('Word Munch: Independent window for this word already exists, skip creation');
+                return;
+            }
+        }
+        
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         
         const independentWidget = document.createElement('div');
-        independentWidget.className = 'word-munch-floating-widget';
-        independentWidget.style.left = `${rect.left}px`;
-        independentWidget.style.top = `${rect.bottom + 10}px`;
+        independentWidget.id = 'word-munch-independent-widget';
+        independentWidget.className = 'word-munch-floating-widget independent-widget';
+        
+        // avoid overlapping with the concept window
+        let widgetX = rect.left;
+        let widgetY = rect.bottom + 10;
+        
+        // If there is a concept window, try to avoid overlapping.
+        if (state.floatingWidget) {
+            const conceptRect = state.floatingWidget.getBoundingClientRect();
+            // If the positions may overlap, adjust the positions.
+            if (Math.abs(widgetX - conceptRect.left) < 200 && Math.abs(widgetY - conceptRect.top) < 100) {
+                widgetX = Math.min(conceptRect.right + 20, window.innerWidth - 300);
+                if (widgetX + 300 > window.innerWidth) {
+                    widgetX = Math.max(conceptRect.left - 320, 20);
+                    if (widgetX < 20) {
+                        widgetY = Math.max(conceptRect.bottom + 20, rect.bottom + 10);
+                    }
+                }
+            }
+        }
+        
+        // Boundary check
+        widgetX = Math.max(20, Math.min(widgetX, window.innerWidth - 300));
+        widgetY = Math.max(20, Math.min(widgetY, window.innerHeight - 200));
+        
+        independentWidget.style.left = `${widgetX}px`;
+        independentWidget.style.top = `${widgetY}px`;
         independentWidget.style.position = 'fixed';
-        independentWidget.style.zIndex = '10001';
+        independentWidget.style.zIndex = '10002'; // Higher than concept window
+        independentWidget.style.width = '280px';
+        
+        // Check if in reader mode
+        const isInReaderMode = document.getElementById('word-munch-reader-container');
+        if (isInReaderMode) {
+            independentWidget.style.zIndex = '2147483649'; // Higher than reader mode
+            console.log('Word Munch: Independent widget in reader mode, using highest z-index');
+        }
         
         independentWidget.innerHTML = ContentTemplates.createWordMuncherContent(selectedText);
         document.body.appendChild(independentWidget);
         
+        // Set drag-and-drop function
+        DragHandler.makeDraggable(independentWidget);
+        
+        // Bind event
+        this.setupIndependentWidgetEvents(independentWidget, selectedText);
+        
+        // Show animation
         setTimeout(() => {
             independentWidget.classList.add('show');
         }, 10);
         
-        // Automatically start simplification
-        APIManager.startSimplification(selectedText, 'word');
+        // Automatic start simplified
+        console.log('Word Munch: Starting simplification for independent widget:', selectedText);
+        
+        // Create a temporary status to handle this independent request
+        const tempRequestId = Math.random().toString(36).substr(2, 9);
+        independentWidget.setAttribute('data-request-id', tempRequestId);
+        
+        // Send simplified request
+        const context = this.getContextAroundSelection(selection);
+        
+        // 使用独立的API调用方法，避免错误被路由到主窗口
+        this.sendIndependentWidgetRequest(independentWidget, {
+            type: 'WORD_SELECTED',
+            word: selectedText,
+            text: selectedText,
+            context: context,
+            url: window.location.href,
+            title: document.title,
+            requestId: tempRequestId,
+            isIndependent: true
+        });
+        
+        // Add timeout handling
+        setTimeout(() => {
+            if (independentWidget && independentWidget.parentNode) {
+                const loadingEl = independentWidget.querySelector('.wm-loading');
+                const errorEl = independentWidget.querySelector('.wm-error');
+                
+                if (loadingEl && loadingEl.style.display !== 'none') {
+                    if (loadingEl) loadingEl.style.display = 'none';
+                    if (errorEl) {
+                        errorEl.innerHTML = `
+                            <div style="margin-bottom: 8px;">Request timeout</div>
+                            <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
+                                Retry
+                            </button>
+                        `;
+                        errorEl.classList.add('show');
+                        
+                        const retryBtn = errorEl.querySelector('.wm-retry-btn');
+                        if (retryBtn) {
+                            retryBtn.addEventListener('click', () => {
+                                // Restart simplified
+                                errorEl.classList.remove('show');
+                                loadingEl.style.display = 'flex';
+                                
+                                const newRequestId = Math.random().toString(36).substr(2, 9);
+                                independentWidget.setAttribute('data-request-id', newRequestId);
+                                
+                                this.sendIndependentWidgetRequest(independentWidget, {
+                                    type: 'WORD_SELECTED',
+                                    word: selectedText,
+                                    text: selectedText,
+                                    context: context,
+                                    url: window.location.href,
+                                    title: document.title,
+                                    requestId: newRequestId,
+                                    isIndependent: true
+                                });
+                            });
+                        }
+                    }
+                }
+            }
+        }, 15000);
+        
+        console.log('Word Munch: Independent word window created successfully');
+    }
+
+    // 独立窗口专用的API请求方法
+    static sendIndependentWidgetRequest(widget, message) {
+        const messageId = Math.random().toString(36).substr(2, 9);
+        message.messageId = messageId;
+        message.timestamp = Date.now();
+        
+        console.log('Word Munch: Send independent widget request:', message.type, messageId);
+        
+        try {
+            chrome.runtime.sendMessage(message, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error('Word Munch: Independent widget request failed:', chrome.runtime.lastError.message);
+                    
+                    if (widget && widget.parentNode) {
+                        const loadingEl = widget.querySelector('.wm-loading');
+                        const errorEl = widget.querySelector('.wm-error');
+                        
+                        if (loadingEl) loadingEl.style.display = 'none';
+                        if (errorEl) {
+                            let errorMessage = 'Connection failed';
+                            if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+                                errorMessage = 'Extension needs refresh, please refresh page';
+                            }
+                            
+                            errorEl.innerHTML = `
+                                <div style="margin-bottom: 8px;">${errorMessage}</div>
+                                <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
+                                    Retry
+                                </button>
+                            `;
+                            errorEl.classList.add('show');
+                            
+                            // 绑定重试按钮
+                            const retryBtn = errorEl.querySelector('.wm-retry-btn');
+                            if (retryBtn) {
+                                retryBtn.addEventListener('click', () => {
+                                    errorEl.classList.remove('show');
+                                    if (loadingEl) loadingEl.style.display = 'flex';
+                                    
+                                    // 重新发送请求
+                                    const newRequestId = Math.random().toString(36).substr(2, 9);
+                                    widget.setAttribute('data-request-id', newRequestId);
+                                    message.requestId = newRequestId;
+                                    
+                                    this.sendIndependentWidgetRequest(widget, message);
+                                });
+                            }
+                        }
+                    }
+                    return;
+                }
+                
+                if (response) {
+                    console.log('Word Munch: Independent widget received background response:', response);
+                    
+                    if (response.received) {
+                        console.log('Word Munch: Independent widget message received by background');
+                    } else if (response.error) {
+                        console.error('Word Munch: Independent widget background processing error:', response.error);
+                        
+                        if (widget && widget.parentNode) {
+                            const requestId = widget.getAttribute('data-request-id');
+                            this.handleIndependentWidgetResponse(requestId, null, response.error);
+                        }
+                    }
+                } else {
+                    console.warn('Word Munch: No response from background for independent widget');
+                    
+                    if (widget && widget.parentNode) {
+                        const requestId = widget.getAttribute('data-request-id');
+                        this.handleIndependentWidgetResponse(requestId, null, 'No response received');
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Word Munch: Independent widget send message exception:', error);
+            
+            if (widget && widget.parentNode) {
+                const requestId = widget.getAttribute('data-request-id');
+                this.handleIndependentWidgetResponse(requestId, null, 'Failed to send request');
+            }
+        }
+    }
+
+    static setupIndependentWidgetEvents(widget, selectedText) {
+        console.log('Word Munch: Setting up independent widget events for:', selectedText);
+        
+        // Bind close button
+        const closeBtn = widget.querySelector('.wm-close-btn');
+        if (closeBtn) {
+            const handleCloseClick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('Word Munch: Closing independent widget');
+                
+                // 临时标记正在处理独立窗口按钮点击
+                window._wordMunchIndependentButtonClick = true;
+                setTimeout(() => {
+                    window._wordMunchIndependentButtonClick = false;
+                }, 100);
+                
+                // Remove window
+                if (widget.parentNode) {
+                    widget.classList.remove('show');
+                    setTimeout(() => {
+                        if (widget.parentNode) {
+                            widget.parentNode.removeChild(widget);
+                        }
+                    }, 300);
+                }
+            };
+            
+            closeBtn.addEventListener('click', handleCloseClick, { capture: true });
+            closeBtn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+            closeBtn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+        }
+        
+        // Bind simplify button
+        const simplifyBtn = widget.querySelector('.wm-simplify-btn');
+        if (simplifyBtn) {
+            const handleSimplifyClick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation(); // 防止其他事件监听器处理这个事件
+                console.log('Word Munch: Independent widget simplify button clicked');
+                
+                // 临时标记正在处理独立窗口按钮点击，防止意外的文本选择处理
+                window._wordMunchIndependentButtonClick = true;
+                setTimeout(() => {
+                    window._wordMunchIndependentButtonClick = false;
+                }, 100);
+                
+                // Switch to next synonym
+                this.showNextSynonymForWidget(widget);
+            };
+            
+            // 使用多种事件绑定方式确保事件被完全拦截
+            simplifyBtn.addEventListener('click', handleSimplifyClick, { capture: true });
+            simplifyBtn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+            simplifyBtn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+        }
+        
+        // Bind copy button
+        const copyBtn = widget.querySelector('.wm-copy-btn');
+        if (copyBtn) {
+            const handleCopyClick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('Word Munch: Independent widget copy button clicked');
+                
+                // 临时标记正在处理独立窗口按钮点击
+                window._wordMunchIndependentButtonClick = true;
+                setTimeout(() => {
+                    window._wordMunchIndependentButtonClick = false;
+                }, 100);
+                
+                // Copy current synonym
+                this.copySynonymForWidget(widget);
+            };
+            
+            // 使用多种事件绑定方式确保事件被完全拦截
+            copyBtn.addEventListener('click', handleCopyClick, { capture: true });
+            copyBtn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+            copyBtn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, { capture: true });
+        }
+        
+        // Set click outside close logic (delay adding to avoid immediate trigger)
+        setTimeout(() => {
+            const handleOutsideClick = (e) => {
+                // Skip if currently processing independent widget button click
+                if (window._wordMunchIndependentButtonClick) {
+                    console.log('Word Munch: Ignoring outside click during independent widget button processing');
+                    return;
+                }
+                
+                if (!widget.contains(e.target)) {
+                    console.log('Word Munch: Outside click detected for independent widget');
+                    
+                    // 标记正在关闭独立窗口
+                    window._wordMunchIndependentButtonClick = true;
+                    setTimeout(() => {
+                        window._wordMunchIndependentButtonClick = false;
+                    }, 100);
+                    
+                    // Remove window
+                    if (widget.parentNode) {
+                        widget.classList.remove('show');
+                        setTimeout(() => {
+                            if (widget.parentNode) {
+                                widget.parentNode.removeChild(widget);
+                            }
+                        }, 300);
+                    }
+                    
+                    // Remove event listener
+                    document.removeEventListener('click', handleOutsideClick, true);
+                }
+            };
+            
+            document.addEventListener('click', handleOutsideClick, true);
+            
+            // Store event handler reference for later cleanup
+            widget._outsideClickHandler = handleOutsideClick;
+        }, 500);
+    }
+    
+    // Show next synonym for independent widget
+    static showNextSynonymForWidget(widget) {
+        const currentResult = widget._wordResult;
+        if (!currentResult || !currentResult.synonyms || currentResult.synonyms.length === 0) {
+            console.log('Word Munch: No synonyms available for independent widget');
+            return;
+        }
+        
+        let currentIndex = widget._synonymIndex || 0;
+        const total = currentResult.synonyms.length;
+        
+        if (currentIndex < total - 1) {
+            currentIndex++;
+        } else {
+            currentIndex = 0; // Loop back to the first
+        }
+        
+        widget._synonymIndex = currentIndex;
+        this.updateSynonymDisplayForWidget(widget, currentResult, currentIndex);
+    }
+    
+    // Copy synonym for independent widget
+    static copySynonymForWidget(widget) {
+        const currentResult = widget._wordResult;
+        const currentIndex = widget._synonymIndex || 0;
+        
+        if (!currentResult || !currentResult.synonyms || currentIndex >= currentResult.synonyms.length) {
+            console.log('Word Munch: No synonym to copy for independent widget');
+            return;
+        }
+        
+        const synonym = currentResult.synonyms[currentIndex];
+        const synonymText = typeof synonym === 'string' ? synonym : synonym.word || '';
+        
+        if (synonymText) {
+            navigator.clipboard.writeText(synonymText).then(() => {
+                console.log('Word Munch: Copied synonym from independent widget:', synonymText);
+                
+                const copyBtn = widget.querySelector('.wm-copy-btn');
+                if (copyBtn) {
+                    copyBtn.classList.add('success');
+                    setTimeout(() => {
+                        copyBtn.classList.remove('success');
+                    }, 1000);
+                }
+            }).catch(err => {
+                console.error('Word Munch: Copy failed for independent widget:', err);
+            });
+        }
+    }
+    
+    // Update synonym display for independent widget
+    static updateSynonymDisplayForWidget(widget, result, index) {
+        const synonymEl = widget.querySelector('.wm-synonym');
+        const simplifyBtn = widget.querySelector('.wm-simplify-btn');
+        
+        if (!synonymEl || !result.synonyms || index >= result.synonyms.length) {
+            return;
+        }
+        
+        const synonym = result.synonyms[index];
+        const synonymText = typeof synonym === 'string' ? synonym : synonym.word || 'Simplification complete';
+        
+        synonymEl.textContent = synonymText;
+        
+        if (simplifyBtn) {
+            const current = index + 1;
+            const total = result.synonyms.length;
+            
+            simplifyBtn.classList.remove('wm-btn-loop', 'wm-btn-next');
+            
+            if (current < total) {
+                simplifyBtn.disabled = false;
+                simplifyBtn.innerHTML = '▶';
+                simplifyBtn.title = `Simplify (${current}/${total})`;
+                simplifyBtn.classList.add('wm-btn-next');
+            } else {
+                simplifyBtn.disabled = false;
+                simplifyBtn.innerHTML = '↻';
+                simplifyBtn.title = `Back to first (${current}/${total})`;
+                simplifyBtn.classList.add('wm-btn-loop');
+            }
+        }
+    }
+
+    // Add method for handling independent widget API response
+    static handleIndependentWidgetResponse(requestId, result, error = null) {
+        const independentWidget = document.querySelector(`[data-request-id="${requestId}"]`);
+        
+        if (!independentWidget || !independentWidget.parentNode) {
+            console.log('Word Munch: Independent widget not found for request:', requestId);
+            return;
+        }
+        
+        const loadingEl = independentWidget.querySelector('.wm-loading');
+        const resultEl = independentWidget.querySelector('.wm-result');
+        const errorEl = independentWidget.querySelector('.wm-error');
+        
+        if (error) {
+            console.error('Word Munch: Independent widget error:', error);
+            
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (resultEl) resultEl.classList.remove('show');
+            if (errorEl) {
+                errorEl.innerHTML = `
+                    <div style="margin-bottom: 8px;">${error}</div>
+                    <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
+                        Retry
+                    </button>
+                `;
+                errorEl.classList.add('show');
+                
+                // Bind retry button event
+                const retryBtn = errorEl.querySelector('.wm-retry-btn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', () => {
+                        errorEl.classList.remove('show');
+                        loadingEl.style.display = 'flex';
+                        
+                        // Trigger the logic for re-requesting in createIndependentWordWindow
+                    });
+                }
+            }
+        } else if (result && result.synonyms && result.synonyms.length > 0) {
+            console.log('Word Munch: Independent widget received result:', result);
+            
+            // Store result and index
+            independentWidget._wordResult = result;
+            independentWidget._synonymIndex = 0;
+            
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (errorEl) errorEl.classList.remove('show');
+            if (resultEl) resultEl.classList.add('show');
+            
+            // Update display
+            this.updateSynonymDisplayForWidget(independentWidget, result, 0);
+            
+            console.log('Word Munch: Independent widget result displayed successfully');
+        } else {
+            console.log('Word Munch: Independent widget received empty result');
+            
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (resultEl) resultEl.classList.remove('show');
+            if (errorEl) {
+                errorEl.classList.add('show');
+                errorEl.textContent = 'No simplification results';
+            }
+        }
+    }
+
+    // Add method for getting context (moved from APIManager for independent use)
+    static getContextAroundSelection(selection) {
+        if (!selection.rangeCount) return '';
+        
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        
+        let textContent = '';
+        
+        if (container.nodeType === Node.TEXT_NODE) {
+            textContent = container.parentElement ? container.parentElement.textContent : '';
+        } else {
+            textContent = container.textContent || '';
+        }
+        
+        const selectedText = selection.toString();
+        const selectedIndex = textContent.indexOf(selectedText);
+        
+        if (selectedIndex === -1) return '';
+        
+        let contextLength = 100;
+        
+        if (selectedText.length > 50) {
+            contextLength = 50;
+        } else if (selectedText.length > 20) {
+            contextLength = 75;
+        }
+        
+        const beforeContext = textContent.substring(Math.max(0, selectedIndex - contextLength), selectedIndex);
+        const afterContext = textContent.substring(selectedIndex + selectedText.length, selectedIndex + selectedText.length + contextLength);
+        
+        return (beforeContext + selectedText + afterContext).trim();
     }
 }
 
@@ -969,9 +1537,6 @@ class ContentTemplates {
                 <div class="wm-result">
                     <div class="wm-synonym-container">
                         <div class="wm-synonym"></div>
-                        <div class="wm-position-indicator" style="display: none;">
-                            <div class="position-dots"></div>
-                        </div>
                     </div>
                     <div class="wm-buttons">
                         <button class="wm-btn wm-btn-primary wm-simplify-btn" title="Next"></button>
@@ -986,36 +1551,7 @@ class ContentTemplates {
         `;
     }    
 
-    // Add position indicator update logic
-    static updatePositionIndicator() {
-        if (!state.floatingWidget || !state.currentResult || !state.currentResult.synonyms) {
-            return;
-        }
-        
-        const indicatorEl = state.floatingWidget.querySelector('.wm-position-indicator');
-        const dotsContainer = state.floatingWidget.querySelector('.position-dots');
-        
-        if (!indicatorEl || !dotsContainer) return;
-        
-        const total = state.currentResult.synonyms.length;
-        const current = state.currentSynonymIndex;
-        
-        // Only show indicator when there are multiple synonyms
-        if (total > 1) {
-            indicatorEl.style.display = 'block';
-            
-            // Create dots
-            dotsContainer.innerHTML = '';
-            for (let i = 0; i < total; i++) {
-                const dot = document.createElement('div');
-                dot.className = `position-dot ${i === current ? 'active' : ''}`;
-                dot.title = `Synonym ${i + 1}`;
-                dotsContainer.appendChild(dot);
-            }
-        } else {
-            indicatorEl.style.display = 'none';
-        }
-    }
+
 
     static createConceptMuncherContent(text) {
         const displayText = text.length > 50 ? text.substring(0, 50) + '...' : text;
@@ -1291,7 +1827,6 @@ class ResultDisplayer {
             if (resultEl) resultEl.classList.add('show');
             
             this.updateSynonymDisplay();
-            ContentTemplates.updatePositionIndicator();
             
             // If there is only one synonym, add a special prompt. 
             if (result.synonyms.length === 1) {
@@ -1351,9 +1886,6 @@ class ResultDisplayer {
                 }
             }
         }
-        
-        // Update position indicator
-        ContentTemplates.updatePositionIndicator();
     }
 
     static showNextSynonym() {
@@ -1383,7 +1915,6 @@ class ResultDisplayer {
         }
         
         this.updateSynonymDisplay();
-        ContentTemplates.updatePositionIndicator();
     }
 
     // Add loop animation effect
@@ -2058,6 +2589,35 @@ class MessageHandlers {
     static handleWordSimplified(word, result) {
         console.log('Word Munch: Word simplification complete:', word, result);
         
+        // 首先检查是否有活跃的独立窗口等待这个单词的结果
+        const independentWidgets = document.querySelectorAll('.independent-widget[data-request-id]');
+        for (const widget of independentWidgets) {
+            const widgetText = widget.querySelector('.wm-header-text')?.textContent;
+            // 改进匹配逻辑：检查单词是否包含在标题中，或者标题是否包含单词的开头部分
+            if (widgetText && (widgetText.includes(word) || word.includes(widgetText.replace(/[📝"]/g, '').replace(/\.\.\.$/, '').trim()))) {
+                console.log('Word Munch: Found matching independent widget for word:', word, 'title:', widgetText);
+                const requestId = widget.getAttribute('data-request-id');
+                WidgetManager.handleIndependentWidgetResponse(requestId, result);
+                return;
+            }
+        }
+        
+        // 如果在concept mode且主窗口不是处理这个单词，则可能是独立窗口的响应
+        if (state.isConceptMode && (!state.currentSelection || state.currentSelection.text !== word)) {
+            console.log('Word Munch: In concept mode and no matching main window, checking for independent widgets');
+            
+            // 查找任何正在加载的独立窗口
+            const loadingWidgets = document.querySelectorAll('.independent-widget .wm-loading[style*="flex"], .independent-widget .wm-loading:not([style*="none"])');
+            if (loadingWidgets.length > 0) {
+                console.log('Word Munch: Found loading independent widget, routing response to it');
+                const loadingWidget = loadingWidgets[0].closest('.independent-widget');
+                const requestId = loadingWidget.getAttribute('data-request-id');
+                WidgetManager.handleIndependentWidgetResponse(requestId, result);
+                return;
+            }
+        }
+        
+        // Handle main window response
         if (!state.floatingWidget || !state.currentSelection || state.currentSelection.text !== word) {
             console.log('Word Munch: Result does not match current state, ignore');
             return;
@@ -2101,6 +2661,35 @@ class MessageHandlers {
     static handleSimplifyError(word, error) {
         console.error('Word Munch: Simplification failed:', word, error);
         
+        // Check if there is an active independent widget waiting for this word result
+        const independentWidgets = document.querySelectorAll('.independent-widget[data-request-id]');
+        for (const widget of independentWidgets) {
+            const widgetText = widget.querySelector('.wm-header-text')?.textContent;
+            // 改进匹配逻辑：检查单词是否包含在标题中，或者标题是否包含单词的开头部分
+            if (widgetText && (widgetText.includes(word) || word.includes(widgetText.replace(/[📝"]/g, '').replace(/\.\.\.$/, '').trim()))) {
+                console.log('Word Munch: Found matching independent widget for error:', word, 'title:', widgetText);
+                const requestId = widget.getAttribute('data-request-id');
+                WidgetManager.handleIndependentWidgetResponse(requestId, null, error.message || error);
+                return;
+            }
+        }
+        
+        // If in concept mode and main window is not handling this word, it might be an independent widget error
+        if (state.isConceptMode && (!state.currentSelection || state.currentSelection.text !== word)) {
+            console.log('Word Munch: In concept mode and no matching main window, checking for independent widgets for error');
+            
+            // Find any loading independent widgets
+            const loadingWidgets = document.querySelectorAll('.independent-widget .wm-loading[style*="flex"], .independent-widget .wm-loading:not([style*="none"])');
+            if (loadingWidgets.length > 0) {
+                console.log('Word Munch: Found loading independent widget, routing error to it');
+                const loadingWidget = loadingWidgets[0].closest('.independent-widget');
+                const requestId = loadingWidget.getAttribute('data-request-id');
+                WidgetManager.handleIndependentWidgetResponse(requestId, null, error.message || error);
+                return;
+            }
+        }
+        
+        // Handle main window error
         if (!state.floatingWidget || !state.currentSelection || state.currentSelection.text !== word) {
             console.log('Word Munch: Error does not match current state, ignore');
             return;

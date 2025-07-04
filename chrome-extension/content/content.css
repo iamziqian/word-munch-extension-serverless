@@ -121,6 +121,48 @@
     z-index: 2147483648 !important; /* Higher than reading mode */
 }
 
+/* Independent widget styles */
+.word-munch-floating-widget.independent-widget {
+    border: 2px solid #6366f1 !important;
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.2) !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    backdrop-filter: blur(10px) !important;
+}
+
+.word-munch-floating-widget.independent-widget .wm-header {
+    background: linear-gradient(135deg, #4f46e5, #3b82f6) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.word-munch-floating-widget.independent-widget .wm-header-text {
+    font-weight: 600 !important;
+}
+
+.word-munch-floating-widget.independent-widget .wm-synonym {
+    background: linear-gradient(135deg, #eef2ff, #dbeafe) !important;
+    border-left: 4px solid #4f46e5 !important;
+    color: #1e40af !important;
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1) !important;
+}
+
+
+
+/* Independent widget animation */
+.word-munch-floating-widget.independent-widget {
+    animation: independentWidgetSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes independentWidgetSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 /* === Unified window header style === */
 .wm-header {
     padding: var(--wm-spacing-md);
