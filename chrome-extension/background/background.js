@@ -224,7 +224,6 @@ class CognitiveProfileManager {
         }
     
         try {
-            console.log('Service Worker: Fetching cognitive profile from API:', this.cognitiveAPI);
             const authToken = await UserManager.getAuthToken();
             
             const requestBody = {
@@ -232,8 +231,6 @@ class CognitiveProfileManager {
                 user_id: userId,
                 days: days
             };
-            
-            console.log('Service Worker: Cognitive API request body:', requestBody);
             
             const response = await fetch(this.cognitiveAPI, {
                 method: 'POST',
@@ -428,6 +425,9 @@ class SemanticSearchManager {
     async searchSemanticChunks(chunks, query, options = {}) {
         console.log('Service Worker: Starting semantic search for query:', query);
         
+        // Refresh API endpoint from CONFIG in case it was loaded after initialization
+        this.semanticSearchAPI = CONFIG.SEMANTIC_SEARCH_API_ENDPOINT;
+        
         // Check if semantic search API is configured
         if (!this.semanticSearchAPI || 
             this.semanticSearchAPI === '' || 
@@ -460,6 +460,7 @@ class SemanticSearchManager {
             };
             
             console.log('Service Worker: Calling semantic search API with', chunks.length, 'chunks');
+            console.log('Service Worker: Request body:', JSON.stringify(requestBody, null, 2));
             
             const response = await fetch(this.semanticSearchAPI, {
                 method: 'POST',
@@ -469,6 +470,8 @@ class SemanticSearchManager {
                 },
                 body: JSON.stringify(requestBody)
             });
+            
+            console.log('Service Worker: API response status:', response.status, response.statusText);
 
             if (!response.ok) {
                 throw new Error(`Semantic search API failed: ${response.status} - ${response.statusText}`);
@@ -498,7 +501,8 @@ class SemanticSearchManager {
     }
 
     fallbackTextSearch(chunks, query, options = {}) {
-        console.log('Service Worker: Using fallback text search');
+        console.log('🔄 Service Worker: Using fallback text search instead of semantic API');
+        console.log('🔄 Service Worker: Fallback search for query:', query, 'in', chunks.length, 'chunks');
         
         const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
         const results = [];
@@ -531,6 +535,8 @@ class SemanticSearchManager {
             .filter(result => result.similarity >= threshold)
             .slice(0, options.top_k || 5);
 
+        console.log('🔄 Service Worker: Fallback search completed, found', relevant_chunks.length, 'relevant chunks');
+        
         return {
             query: query,
             total_chunks: chunks.length,
@@ -539,7 +545,9 @@ class SemanticSearchManager {
             processing_stats: {
                 chunks_processed: chunks.length,
                 embeddings_generated: 0, // No embeddings in fallback
-                relevant_found: relevant_chunks.length
+                relevant_found: relevant_chunks.length,
+                api_method: 'Fallback Text Search',
+                note: 'Semantic API not available - using keyword matching'
             },
             fallback_used: true
         };
@@ -1265,8 +1273,6 @@ class APIManager {
         console.log('Service Worker: Concept API call started');
         console.log('Original text length:', original_text?.length || 0);
         console.log('Understanding length:', user_understanding?.length || 0);
-        console.log('Endpoint:', CONFIG.CONCEPT_API_ENDPOINT);
-        console.log('Endpoint valid:', !!CONFIG.CONCEPT_API_ENDPOINT && CONFIG.CONCEPT_API_ENDPOINT !== 'https://your-api-domain.com/concept-muncher');
         
         // Check endpoint
         if (!CONFIG.CONCEPT_API_ENDPOINT) {

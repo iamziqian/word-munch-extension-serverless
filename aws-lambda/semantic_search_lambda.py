@@ -36,7 +36,7 @@ def lambda_handler(event, context):
 
 def handle_semantic_search(body: Dict) -> Dict:
     """
-    Handle semantic search request using Titan Embeddings v2 Batch API
+    Handle semantic search request using Titan Embeddings v2
     """
     try:
         chunks = body.get('chunks', [])
@@ -47,12 +47,12 @@ def handle_semantic_search(body: Dict) -> Dict:
         if not chunks or not query:
             return create_response(400, {'error': 'Missing chunks or query'})
         
-        logger.info(f"Searching among {len(chunks)} chunks for query: {query[:50]}... using BATCH API")
+        logger.info(f"Searching among {len(chunks)} chunks for query: {query[:50]}... using Titan v2")
         
         # Prepare all texts for batch processing (query + chunks)
         all_texts = [query] + chunks
         
-        # Generate embeddings using batch API (much more cost-effective)
+        # Generate embeddings using Titan v2
         all_embeddings = generate_batch_embeddings(all_texts)
         
         # Extract query embedding and chunk embeddings
@@ -101,7 +101,7 @@ def handle_semantic_search(body: Dict) -> Dict:
 
 def handle_embedding_generation(body: Dict) -> Dict:
     """
-    Handle batch embedding generation request using Titan v2 Batch API
+    Handle batch embedding generation request using Titan v2
     """
     try:
         texts = body.get('texts', [])
@@ -109,9 +109,9 @@ def handle_embedding_generation(body: Dict) -> Dict:
         if not texts:
             return create_response(400, {'error': 'Missing texts'})
         
-        logger.info(f"Generating embeddings for {len(texts)} texts using BATCH API")
+        logger.info(f"Generating embeddings for {len(texts)} texts using Titan v2")
         
-        # Use batch API for much better cost efficiency
+        # Use Titan v2 for much better cost efficiency
         embeddings = generate_batch_embeddings(texts)
         
         # Convert to list format for JSON serialization
@@ -162,7 +162,7 @@ def generate_batch_embeddings(texts: List[str]) -> List[List[float]]:
 def generate_single_embedding(text: str) -> List[float]:
     """
     Generate single text embedding using Amazon Titan Embeddings v2
-    Used as fallback when batch API is not available
+    Used as fallback when Titan v2 is not available
     """
     try:
         # Prepare request body
@@ -235,7 +235,7 @@ def create_response(status_code: int, body: Dict) -> Dict:
 
 def batch_process_chunks(chunks: List[str], max_batch_size: int = 25) -> List[List[float]]:
     """
-    Process chunks using Titan v2 Batch API for optimal cost efficiency
+    Process chunks using Titan v2 for optimal cost efficiency
     
     Args:
         chunks: List of text chunks to process
@@ -245,9 +245,9 @@ def batch_process_chunks(chunks: List[str], max_batch_size: int = 25) -> List[Li
         List of embeddings corresponding to input chunks
     """
     try:
-        # Use the new batch API function directly
+        # Use Titan v2 function directly
         embeddings = generate_batch_embeddings(chunks)
-        logger.info(f"Batch processed {len(chunks)} chunks with cost-optimized Titan v2 Batch API")
+        logger.info(f"Batch processed {len(chunks)} chunks with cost-optimized Titan v2")
         return embeddings
         
     except Exception as e:
