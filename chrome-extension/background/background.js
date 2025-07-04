@@ -4,6 +4,7 @@ let CONFIG = {
     CONCEPT_API_ENDPOINT: '',
     COGNITIVE_API_ENDPOINT: '',
     USER_API_ENDPOINT: '', // Will be loaded from config.js
+    SEMANTIC_SEARCH_API_ENDPOINT: '', // Will be loaded from config.js
     MEMORY_CACHE_TIME: 3000,
     INDEXEDDB_CACHE_TIME: 24 * 60 * 60 * 1000,
     DB_NAME: 'WordMunchCache',
@@ -22,17 +23,13 @@ async function loadAPIConfig() {
         const conceptMatch = configText.match(/CONCEPT_API_ENDPOINT:\s*['"](.*?)['"]/);
         const cognitiveMatch = configText.match(/COGNITIVE_API_ENDPOINT:\s*['"](.*?)['"]/);
         const userMatch = configText.match(/USER_API_ENDPOINT:\s*['"](.*?)['"]/);
+        const semanticSearchMatch = configText.match(/SEMANTIC_SEARCH_API_ENDPOINT:\s*['"](.*?)['"]/);
         
         if (wordMatch) CONFIG.WORD_API_ENDPOINT = wordMatch[1];
         if (conceptMatch) CONFIG.CONCEPT_API_ENDPOINT = conceptMatch[1];
         if (cognitiveMatch) CONFIG.COGNITIVE_API_ENDPOINT = cognitiveMatch[1];
         if (userMatch) CONFIG.USER_API_ENDPOINT = userMatch[1];
-        
-        console.log('Service Worker: API endpoints parsed from config.js:');
-        console.log('- WORD_API_ENDPOINT:', CONFIG.WORD_API_ENDPOINT);
-        console.log('- CONCEPT_API_ENDPOINT:', CONFIG.CONCEPT_API_ENDPOINT);
-        console.log('- COGNITIVE_API_ENDPOINT:', CONFIG.COGNITIVE_API_ENDPOINT);
-        console.log('- USER_API_ENDPOINT:', CONFIG.USER_API_ENDPOINT);
+        if (semanticSearchMatch) CONFIG.SEMANTIC_SEARCH_API_ENDPOINT = semanticSearchMatch[1];
         
         // Save to storage for content script use
         await chrome.storage.sync.set({
@@ -40,7 +37,8 @@ async function loadAPIConfig() {
                 WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
                 CONCEPT_API_ENDPOINT: CONFIG.CONCEPT_API_ENDPOINT,
                 COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT,
-                USER_API_ENDPOINT: CONFIG.USER_API_ENDPOINT
+                USER_API_ENDPOINT: CONFIG.USER_API_ENDPOINT,
+                SEMANTIC_SEARCH_API_ENDPOINT: CONFIG.SEMANTIC_SEARCH_API_ENDPOINT
             }
         });
         console.log('Service Worker: API config saved to storage');
@@ -56,6 +54,7 @@ async function loadAPIConfig() {
                 CONFIG.CONCEPT_API_ENDPOINT = result.apiConfig.CONCEPT_API_ENDPOINT || '';
                 CONFIG.COGNITIVE_API_ENDPOINT = result.apiConfig.COGNITIVE_API_ENDPOINT || '';
                 CONFIG.USER_API_ENDPOINT = result.apiConfig.USER_API_ENDPOINT || '';
+                CONFIG.SEMANTIC_SEARCH_API_ENDPOINT = result.apiConfig.SEMANTIC_SEARCH_API_ENDPOINT || '';
                 console.log('Service Worker: Fallback - loaded from storage');
             }
         } catch (storageError) {
@@ -419,6 +418,156 @@ class CognitiveProfileManager {
 
 const cognitiveManager = new CognitiveProfileManager()
 
+// === Semantic Search Manager ===
+class SemanticSearchManager {
+    constructor() {
+        this.searchCache = new Map();
+        this.semanticSearchAPI = CONFIG.SEMANTIC_SEARCH_API_ENDPOINT;
+    }
+
+    async searchSemanticChunks(chunks, query, options = {}) {
+        console.log('Service Worker: Starting semantic search for query:', query);
+        
+        // Check if semantic search API is configured
+        if (!this.semanticSearchAPI || 
+            this.semanticSearchAPI === '' || 
+            this.semanticSearchAPI.includes('YOUR_SEMANTIC_SEARCH_API_ENDPOINT_HERE')) {
+            
+            console.log('Service Worker: Semantic search API not configured, using simple text matching');
+            return this.fallbackTextSearch(chunks, query, options);
+        }
+
+        try {
+            const cacheKey = this.generateCacheKey(chunks, query, options);
+            
+            // Check cache (5 minute cache for search results)
+            if (this.searchCache.has(cacheKey)) {
+                const cached = this.searchCache.get(cacheKey);
+                if (Date.now() - cached.timestamp < 300000) { // 5 minutes
+                    console.log('Service Worker: Using cached semantic search results');
+                    return cached.data;
+                }
+            }
+
+            const authToken = await UserManager.getAuthToken();
+            
+            const requestBody = {
+                action: 'search_chunks',
+                chunks: chunks,
+                query: query,
+                top_k: options.top_k || 5,
+                similarity_threshold: options.similarity_threshold || 0.7
+            };
+            
+            console.log('Service Worker: Calling semantic search API with', chunks.length, 'chunks');
+            
+            const response = await fetch(this.semanticSearchAPI, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': authToken ? `Bearer ${authToken}` : ''
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Semantic search API failed: ${response.status} - ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('Service Worker: Semantic search completed, found', result.relevant_chunks?.length || 0, 'relevant chunks');
+
+            // Cache the result
+            this.searchCache.set(cacheKey, {
+                data: result,
+                timestamp: Date.now()
+            });
+
+            // Cleanup cache if it gets too big
+            if (this.searchCache.size > 50) {
+                const oldestKey = this.searchCache.keys().next().value;
+                this.searchCache.delete(oldestKey);
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('Service Worker: Semantic search failed, using fallback:', error.message);
+            return this.fallbackTextSearch(chunks, query, options);
+        }
+    }
+
+    fallbackTextSearch(chunks, query, options = {}) {
+        console.log('Service Worker: Using fallback text search');
+        
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+        const results = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const chunkLower = chunk.toLowerCase();
+            let score = 0;
+
+            // Simple keyword matching
+            for (const word of queryWords) {
+                const occurrences = (chunkLower.match(new RegExp(word, 'g')) || []).length;
+                score += occurrences * (word.length / 10); // Weight by word length
+            }
+
+            if (score > 0) {
+                results.push({
+                    index: i,
+                    chunk: chunk,
+                    similarity: Math.min(score / 10, 1), // Normalize to 0-1
+                    length: chunk.length
+                });
+            }
+        }
+
+        // Sort by similarity and apply threshold
+        results.sort((a, b) => b.similarity - a.similarity);
+        const threshold = options.similarity_threshold || 0.3; // Lower threshold for text search
+        const relevant_chunks = results
+            .filter(result => result.similarity >= threshold)
+            .slice(0, options.top_k || 5);
+
+        return {
+            query: query,
+            total_chunks: chunks.length,
+            relevant_chunks: relevant_chunks,
+            top_similarity: relevant_chunks[0]?.similarity || 0,
+            processing_stats: {
+                chunks_processed: chunks.length,
+                embeddings_generated: 0, // No embeddings in fallback
+                relevant_found: relevant_chunks.length
+            },
+            fallback_used: true
+        };
+    }
+
+    generateCacheKey(chunks, query, options) {
+        // Create a simple hash for caching
+        const content = JSON.stringify({ 
+            chunksHash: this.simpleHash(chunks.join('')), 
+            query, 
+            options 
+        });
+        return this.simpleHash(content);
+    }
+
+    simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        return hash.toString(36);
+    }
+}
+
+const semanticSearchManager = new SemanticSearchManager();
+
 // === Context Menu Manager ===
 class ContextMenuManager {
     static async initializeContextMenus() {
@@ -508,6 +657,7 @@ class MessageRouter {
                         WORD_API_ENDPOINT: CONFIG.WORD_API_ENDPOINT,
                         COGNITIVE_API_ENDPOINT: CONFIG.COGNITIVE_API_ENDPOINT,
                         USER_API_ENDPOINT: CONFIG.USER_API_ENDPOINT,
+                        SEMANTIC_SEARCH_API_ENDPOINT: CONFIG.SEMANTIC_SEARCH_API_ENDPOINT,
                         success: true
                     };
                     
@@ -742,6 +892,36 @@ class MessageRouter {
                         }
                     } catch (error) {
                         console.error('Service Worker: Failed to record cognitive data:', error);
+                    }
+                    return;
+                
+                case 'SEMANTIC_SEARCH':
+                    try {
+                        const { chunks, query, options } = request;
+                        console.log('Service Worker: Processing semantic search request');
+                        
+                        const searchResult = await semanticSearchManager.searchSemanticChunks(
+                            chunks, 
+                            query, 
+                            options || {}
+                        );
+                        
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'SEMANTIC_SEARCH_RESULT',
+                                data: searchResult,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Semantic search failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'SEMANTIC_SEARCH_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
                     }
                     return;
                 

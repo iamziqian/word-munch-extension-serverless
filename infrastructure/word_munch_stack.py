@@ -383,6 +383,36 @@ class WordMunchStack(Stack):
         )
 
         # ============================================================================
+        # Lambda Functions - semantic-search
+        # ============================================================================
+        
+        # Semantic Search Lambda Function
+        self.semantic_search_lambda = _lambda.Function(
+            self, "SemanticSearchLambda",
+            function_name=f"{self.project_name}-semantic-search-{self.env_name}",
+            description="Semantic Search Service using Amazon Titan Embeddings v2",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            code=_lambda.Code.from_asset(lambda_dir),
+            handler="semantic_search_lambda.lambda_handler",
+            timeout=Duration.seconds(120),  # A longer timeout time is used for embedding generation
+            memory_size=1024,  # More memory for vector calculations
+            role=self.lambda_execution_role,
+            environment={
+                "ENVIRONMENT": self.env_name,
+                "PROJECT_NAME": self.project_name,
+                "CACHE_TABLE_NAME": self.cache_table.table_name,
+                "CACHE_ENABLED": "true",
+                "SERVICE_TYPE": "semantic-search"
+            }
+        )
+        
+        # Add tags
+        self._apply_common_tags(self.semantic_search_lambda, {
+            "Service": "semantic-search",
+            "Purpose": "embedding-vector-search"
+        })
+
+        # ============================================================================
         # Lambda Functions - user-auth
         # ============================================================================
 
@@ -614,6 +644,46 @@ class WordMunchStack(Stack):
         )
         print("Created API endpoint: /user-auth")
 
+        # Semantic Search API Endpoint
+        semantic_search_resource = self.api.root.add_resource("semantic-search")
+        
+        # Integrate with Lambda function
+        semantic_search_integration = apigw.LambdaIntegration(
+            self.semantic_search_lambda
+        )
+
+        # POST method for semantic-search
+        semantic_search_resource.add_method(
+            "POST",
+            semantic_search_integration,
+            authorization_type=apigw.AuthorizationType.NONE, # no authorization
+            api_key_required=False,
+            request_models={
+                "application/json": apigw.Model.EMPTY_MODEL
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="400", # client error   
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="500", # server error
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                )
+            ]
+        )
+        print("Created API endpoint: /semantic-search")
+
         # ============================================================================
         # Outputs
         # ============================================================================
@@ -656,6 +726,14 @@ class WordMunchStack(Stack):
             value=f"{self.api.url}user-auth",
             description="User Authentication Service URL - Registration and Login Service",
             export_name=f"{self.project_name}-user-auth-url-{self.env_name}"
+        )
+        
+        # Semantic Search URL
+        CfnOutput(
+            self, "SemanticSearchUrl",
+            value=f"{self.api.url}semantic-search",
+            description="Semantic Search Service URL - Intelligent Chunk Matching using Amazon Titan Embeddings v2",
+            export_name=f"{self.project_name}-semantic-search-url-{self.env_name}"
         )
         
         # DynamoDB Table Name
