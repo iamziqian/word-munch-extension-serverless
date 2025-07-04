@@ -134,6 +134,154 @@ class ContentScriptState {
 
 const state = new ContentScriptState();
 
+// === Semantic Search Manager ===
+class SemanticSearchManager {
+    constructor() {
+        this.currentChunks = [];
+        this.searchCache = new Map();
+        this.activeSearches = new Map();
+        this.isIntegrationReady = false;
+    }
+
+    // Set current page chunks
+    setChunks(chunks) {
+        this.currentChunks = chunks;
+        this.isIntegrationReady = true;
+        console.log('🔍 Semantic Search: Updated chunks:', chunks.length);
+    }
+
+    // Perform semantic search
+    async searchChunks(query, options = {}) {
+        if (!this.currentChunks || this.currentChunks.length === 0) {
+            throw new Error('No chunks available for search. Please use reading mode first to generate semantic chunks.');
+        }
+
+        if (query.trim().length < 3) {
+            throw new Error('Query too short. Please enter at least 3 characters.');
+        }
+
+        const requestId = this.generateRequestId();
+        const cacheKey = this.generateCacheKey(query, options);
+
+        // Check cache first
+        if (this.searchCache.has(cacheKey)) {
+            const cached = this.searchCache.get(cacheKey);
+            if (Date.now() - cached.timestamp < 300000) { // 5 minutes
+                console.log('🔍 Semantic Search: Using cached results');
+                return cached.data;
+            }
+        }
+
+        console.log('🔍 Semantic Search: Starting search for:', query);
+
+        try {
+            // Send request to background script
+            const searchPromise = new Promise((resolve, reject) => {
+                this.activeSearches.set(requestId, { resolve, reject });
+
+                chrome.runtime.sendMessage({
+                    type: 'SEMANTIC_SEARCH',
+                    chunks: this.currentChunks,
+                    query: query,
+                    options: {
+                        top_k: options.top_k || 5,
+                        similarity_threshold: options.similarity_threshold || 0.7,
+                        ...options
+                    },
+                    requestId: requestId
+                });
+            });
+
+            const result = await searchPromise;
+
+            // Cache the result
+            this.searchCache.set(cacheKey, {
+                data: result,
+                timestamp: Date.now()
+            });
+
+            // Cleanup cache if it gets too big
+            if (this.searchCache.size > 20) {
+                const oldestKey = this.searchCache.keys().next().value;
+                this.searchCache.delete(oldestKey);
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('🔍 Semantic Search: Search failed:', error);
+            throw error;
+        } finally {
+            this.activeSearches.delete(requestId);
+        }
+    }
+
+    // Handle search result from background script
+    handleSearchResult(data, requestId) {
+        const search = this.activeSearches.get(requestId);
+        if (search) {
+            search.resolve(data);
+        }
+    }
+
+    // Handle search error from background script
+    handleSearchError(error, requestId) {
+        const search = this.activeSearches.get(requestId);
+        if (search) {
+            search.reject(new Error(error));
+        }
+    }
+
+    generateRequestId() {
+        return `search_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    generateCacheKey(query, options) {
+        return `${query}_${JSON.stringify(options)}_${this.simpleHash(this.currentChunks.join(''))}`;
+    }
+
+    simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        return hash.toString(36);
+    }
+
+    // Get current chunks count
+    getChunksCount() {
+        return this.currentChunks.length;
+    }
+
+    // Check if ready for search
+    isReady() {
+        return this.isIntegrationReady && this.currentChunks.length > 0;
+    }
+
+    // Clear chunks
+    clearChunks() {
+        this.currentChunks = [];
+        this.searchCache.clear();
+        this.isIntegrationReady = false;
+        console.log('🔍 Semantic Search: Chunks cleared');
+    }
+
+    // Get search status info
+    getStatus() {
+        return {
+            isReady: this.isReady(),
+            chunksCount: this.getChunksCount(),
+            activeSearches: this.activeSearches.size,
+            cachedResults: this.searchCache.size
+        };
+    }
+}
+
+// Global semantic search manager instance
+const semanticSearchManager = new SemanticSearchManager();
+
 // === Event Listener Management ===
 class EventManager {
     constructor() {
@@ -454,6 +602,16 @@ class EventManager {
                 case 'COGNITIVE_PROFILE_ERROR':
                     console.log('Word Munch: Cognitive profile error:', message.error);
                     cognitiveDashboard.handleProfileError(message.error, message.requestId);
+                    break;
+
+                case 'SEMANTIC_SEARCH_RESULT':
+                    console.log('Word Munch: Received semantic search result');
+                    semanticSearchManager.handleSearchResult(message.data, message.requestId);
+                    break;
+
+                case 'SEMANTIC_SEARCH_ERROR':
+                    console.log('Word Munch: Received semantic search error:', message.error);
+                    semanticSearchManager.handleSearchError(message.error, message.requestId);
                     break;
                     
                 default:
@@ -3107,11 +3265,23 @@ class SimpleReaderMode {
                         <div class="right-controls">
                             <button id="chunkToggleBtn" class="control-btn">📑 Chunk Mode</button>
                             <button id="colorToggleBtn" class="control-btn" style="display:none;">🌈 Color Mode</button>
+                            <button id="semanticSearchBtn" class="control-btn">🔍 Smart Search</button>
                         </div>
                     </div>
                     
                     <h1 class="article-title">${article.title}</h1>
                     ${article.byline ? `<div class="article-byline">Author: ${article.byline}</div>` : ''}
+                </div>
+                
+                <div id="semanticSearchPanel" class="semantic-search-panel" style="display: none;">
+                    <div class="search-container">
+                        <input type="text" id="semanticSearchInput" placeholder="Ask a question or search for content..." 
+                               class="search-input" maxlength="200">
+                        <button id="executeSearchBtn" class="search-button">Search</button>
+                        <button id="closeSearchBtn" class="close-search-button">✕</button>
+                    </div>
+                    <div id="searchStatus" class="search-status"></div>
+                    <div id="searchResults" class="search-results"></div>
                 </div>
                 
                 <div class="reader-content" id="readerContent">
@@ -3137,6 +3307,31 @@ class SimpleReaderMode {
         const colorToggleBtn = document.getElementById('colorToggleBtn');
         if (colorToggleBtn) {
             colorToggleBtn.addEventListener('click', () => this.toggleColorMode());
+        }
+
+        // Semantic search controls
+        const semanticSearchBtn = document.getElementById('semanticSearchBtn');
+        if (semanticSearchBtn) {
+            semanticSearchBtn.addEventListener('click', () => this.toggleSemanticSearch());
+        }
+
+        const closeSearchBtn = document.getElementById('closeSearchBtn');
+        if (closeSearchBtn) {
+            closeSearchBtn.addEventListener('click', () => this.hideSemanticSearch());
+        }
+
+        const executeSearchBtn = document.getElementById('executeSearchBtn');
+        if (executeSearchBtn) {
+            executeSearchBtn.addEventListener('click', () => this.executeSemanticSearch());
+        }
+
+        const searchInput = document.getElementById('semanticSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.executeSemanticSearch();
+                }
+            });
         }
 
         this.keyboardHandler = (e) => {
@@ -3203,6 +3398,9 @@ class SimpleReaderMode {
             window.scrollTo(0, this.originalScrollPosition);
         }, 100);
         
+        // Clear semantic search chunks
+        semanticSearchManager.clearChunks();
+        
         this.isReaderActive = false;
         this.isChunkedMode = false;
         this.isColorMode = false;
@@ -3213,6 +3411,8 @@ class SimpleReaderMode {
     async createTextChunks(textContent) {
         console.log('Word Munch: Create text chunks');
         
+        let chunks;
+        
         try {
             if (typeof window.createFiveLanguageChunker === 'function') {
                 const semanticChunker = window.createFiveLanguageChunker({
@@ -3221,15 +3421,23 @@ class SimpleReaderMode {
                     minLength: 150
                 });
                 
-                const chunks = await semanticChunker.createChunks(textContent);
+                chunks = await semanticChunker.createChunks(textContent);
                 console.log('Word Munch: Semantic chunking complete,', chunks.length, 'chunks');
-                return chunks;
+            } else {
+                chunks = this.createTextChunksOriginal(textContent);
             }
         } catch (error) {
             console.error('Word Munch: Semantic chunking failed, use original method:', error);
+            chunks = this.createTextChunksOriginal(textContent);
         }
         
-        return this.createTextChunksOriginal(textContent);
+        // Update semantic search manager with the new chunks
+        if (chunks && chunks.length > 0) {
+            semanticSearchManager.setChunks(chunks);
+            console.log('🔍 Reader Mode: Updated semantic search with', chunks.length, 'chunks');
+        }
+        
+        return chunks;
     }
 
     createTextChunksOriginal(textContent) {
@@ -3498,6 +3706,237 @@ class SimpleReaderMode {
             colorToggleBtn.textContent = '🌈 Color Mode';
             colorToggleBtn.classList.remove('active');
         }
+    }
+
+    // === Semantic Search Methods ===
+    toggleSemanticSearch() {
+        const searchPanel = document.getElementById('semanticSearchPanel');
+        const searchBtn = document.getElementById('semanticSearchBtn');
+        
+        if (!searchPanel) return;
+
+        const isVisible = searchPanel.style.display !== 'none';
+        
+        if (isVisible) {
+            this.hideSemanticSearch();
+        } else {
+            this.showSemanticSearch();
+        }
+    }
+
+    showSemanticSearch() {
+        const searchPanel = document.getElementById('semanticSearchPanel');
+        const searchBtn = document.getElementById('semanticSearchBtn');
+        const searchInput = document.getElementById('semanticSearchInput');
+        
+        if (!searchPanel) return;
+
+        // Check if chunks are available
+        const status = semanticSearchManager.getStatus();
+        console.log('🔍 Semantic Search Status:', status);
+
+        searchPanel.style.display = 'block';
+        searchBtn.classList.add('active');
+        searchBtn.textContent = '🔍 Hide Search';
+
+        // Update status
+        this.updateSearchStatus();
+
+        // Focus on input
+        if (searchInput) {
+            setTimeout(() => {
+                searchInput.focus();
+            }, 100);
+        }
+    }
+
+    hideSemanticSearch() {
+        const searchPanel = document.getElementById('semanticSearchPanel');
+        const searchBtn = document.getElementById('semanticSearchBtn');
+        const searchResults = document.getElementById('searchResults');
+        
+        if (!searchPanel) return;
+
+        searchPanel.style.display = 'none';
+        searchBtn.classList.remove('active');
+        searchBtn.textContent = '🔍 Smart Search';
+
+        // Clear results
+        if (searchResults) {
+            searchResults.innerHTML = '';
+        }
+    }
+
+    updateSearchStatus() {
+        const statusDiv = document.getElementById('searchStatus');
+        if (!statusDiv) return;
+
+        const status = semanticSearchManager.getStatus();
+        
+        if (status.isReady) {
+            statusDiv.innerHTML = `
+                <div class="status-ready">
+                    ✅ Ready to search ${status.chunksCount} text chunks
+                </div>
+            `;
+        } else {
+            statusDiv.innerHTML = `
+                <div class="status-not-ready">
+                    ⚠️ Please enable chunk mode first to use semantic search
+                </div>
+            `;
+        }
+    }
+
+    async executeSemanticSearch() {
+        const searchInput = document.getElementById('semanticSearchInput');
+        const searchResults = document.getElementById('searchResults');
+        const executeBtn = document.getElementById('executeSearchBtn');
+        
+        if (!searchInput || !searchResults || !executeBtn) return;
+
+        const query = searchInput.value.trim();
+        if (!query) {
+            this.showSearchMessage('Please enter a search query.', 'warning');
+            return;
+        }
+
+        // Check if semantic search is ready
+        if (!semanticSearchManager.isReady()) {
+            this.showSearchMessage('Please enable chunk mode first to use semantic search.', 'warning');
+            return;
+        }
+
+        console.log('🔍 Executing semantic search for:', query);
+        console.log('🔍 Semantic search status:', semanticSearchManager.getStatus());
+        console.log('🔍 Available chunks:', semanticSearchManager.getChunksCount());
+
+        // Show loading state
+        executeBtn.disabled = true;
+        executeBtn.textContent = 'Searching...';
+        searchResults.innerHTML = '<div class="search-loading">🔍 Searching for relevant content...</div>';
+
+        try {
+            const searchResult = await semanticSearchManager.searchChunks(query, {
+                top_k: 5,
+                similarity_threshold: 0.2  // Lower threshold for better semantic matching
+            });
+
+            console.log('🔍 Search completed:', searchResult);
+            this.displaySearchResults(searchResult);
+
+        } catch (error) {
+            console.error('🔍 Search failed:', error);
+            this.showSearchMessage(`Search failed: ${error.message}`, 'error');
+        } finally {
+            executeBtn.disabled = false;
+            executeBtn.textContent = 'Search';
+        }
+    }
+
+    displaySearchResults(searchResult) {
+        const searchResults = document.getElementById('searchResults');
+        if (!searchResults) return;
+
+        if (!searchResult.relevant_chunks || searchResult.relevant_chunks.length === 0) {
+            searchResults.innerHTML = `
+                <div class="no-results">
+                    <h3>No relevant content found</h3>
+                    <p>Try using different keywords or reducing your search criteria.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const resultsHTML = `
+            <div class="search-results-header">
+                <h3>Found ${searchResult.relevant_chunks.length} relevant chunks</h3>
+                <div class="search-stats">
+                    Top similarity: ${(searchResult.top_similarity * 100).toFixed(1)}%
+                    ${searchResult.fallback_used ? 
+                        ' (using text matching)' : 
+                        searchResult.batch_processed ? 
+                            ' (using AI embeddings - Batch API, 50% cost optimized 💰)' : 
+                            ' (using AI embeddings)'
+                    }
+                </div>
+                ${searchResult.cost_optimized ? `
+                    <div class="cost-optimization-badge">
+                        ⚡ Cost-optimized with Amazon Titan v2 Batch API
+                    </div>
+                ` : ''}
+            </div>
+            <div class="results-list">
+                ${searchResult.relevant_chunks.map((result, index) => `
+                    <div class="result-item" data-chunk-index="${result.index}">
+                        <div class="result-header">
+                            <span class="result-number">#${index + 1}</span>
+                            <span class="similarity-score">${(result.similarity * 100).toFixed(1)}% match</span>
+                            <button class="highlight-chunk-btn" data-chunk-index="${result.index}">
+                                📍 Show in text
+                            </button>
+                        </div>
+                        <div class="result-content">
+                            ${this.highlightQueryInText(result.chunk, searchResult.query)}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        searchResults.innerHTML = resultsHTML;
+        
+        // Add event listeners to highlight buttons
+        const highlightButtons = searchResults.querySelectorAll('.highlight-chunk-btn');
+        highlightButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const chunkIndex = parseInt(button.getAttribute('data-chunk-index'));
+                console.log('🔍 Show in text clicked for chunk:', chunkIndex);
+                this.highlightChunk(chunkIndex);
+            });
+        });
+    }
+
+    highlightQueryInText(text, query) {
+        const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+        let highlightedText = text;
+
+        queryWords.forEach(word => {
+            const regex = new RegExp(`(${word})`, 'gi');
+            highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
+        });
+
+        return highlightedText;
+    }
+
+    highlightChunk(chunkIndex) {
+        console.log('🔍 Highlighting chunk:', chunkIndex);
+        
+        // If in chunk mode, scroll to and highlight the specific chunk
+        if (this.isChunkedMode) {
+            this.focusChunkByIndex(chunkIndex);
+        } else {
+            // Enable chunk mode first
+            this.toggleChunkedMode();
+            setTimeout(() => {
+                this.focusChunkByIndex(chunkIndex);
+            }, 500);
+        }
+    }
+
+    showSearchMessage(message, type = 'info') {
+        const searchResults = document.getElementById('searchResults');
+        if (!searchResults) return;
+
+        const typeClass = type === 'error' ? 'search-error' : 
+                         type === 'warning' ? 'search-warning' : 'search-info';
+
+        searchResults.innerHTML = `
+            <div class="${typeClass}">
+                ${message}
+            </div>
+        `;
     }
 
     fixRelativeUrls(doc) {
