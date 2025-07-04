@@ -61,14 +61,47 @@ def lambda_handler(event, context):
             if not rate_limit_result['allowed']:
                 send_cloudwatch_metrics('anonymous', rate_limit_hit=True)
                 
-                return create_response(429, {
-                    'error': 'Daily usage limit exceeded',
-                    'message': 'Anonymous users are limited to 3 semantic searches per day',
-                    'usage_count': rate_limit_result['current_count'],
-                    'limit': rate_limit_result['daily_limit'],
-                    'reset_time': rate_limit_result['reset_time'],
-                    'error_code': 'RATE_LIMIT_EXCEEDED'
-                })
+                # Return rate limit message as search result instead of error
+                # This allows frontend to display the message without special handling
+                import datetime
+                reset_time = datetime.datetime.fromtimestamp(rate_limit_result['reset_time'])
+                # Format time in 12-hour format to match frontend expectation
+                reset_time_str = reset_time.strftime('%I:%M:%S %p')
+                
+                rate_limit_message = f"""⏰ Daily Limit Reached
+
+• Usage: {rate_limit_result['current_count']}/{rate_limit_result['daily_limit']} today
+
+• Resets at: {reset_time_str}
+
+💡 Consider registering for unlimited access""".strip()
+                
+                # Return appropriate format based on action type
+                current_action = body.get('action', 'search_chunks')
+                if current_action == 'generate_embeddings':
+                    # Return as embedding response format
+                    return create_response(200, {
+                        'embeddings': [],
+                        'dimension': 1024,
+                        'count': 0,
+                        'rate_limited': True,
+                        'message': rate_limit_message
+                    })
+                else:
+                    # Return as search response format (default)
+                    return create_response(200, {
+                        'query': body.get('query', ''),
+                        'total_chunks': 0,
+                        'relevant_chunks': [{
+                            'index': 0,
+                            'chunk': rate_limit_message,
+                            'similarity': 1.0,
+                            'length': len(rate_limit_message),
+                            'is_rate_limit_message': True
+                        }],
+                        'top_similarity': 1.0,
+                        'rate_limited': True
+                    })
         
         # Send CloudWatch metrics
         user_type = 'anonymous' if is_anonymous else 'registered'
