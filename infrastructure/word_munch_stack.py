@@ -5,6 +5,8 @@ from aws_cdk import (
     aws_apigateway as apigw,
     aws_dynamodb as ddb,
     aws_iam as iam,
+    aws_sqs as sqs,
+    aws_lambda_event_sources as lambda_event_sources,
     Duration,
     RemovalPolicy,
     CfnOutput,
@@ -39,6 +41,15 @@ class WordMunchStack(Stack):
         #   "data": "string",         # Optional: Cache data
         #   "ttl": "number"           # Optional: Expiration timestamp
         # }
+
+        # {
+        #   "userId": "string",       # Necessities: User ID (Primary Key)
+        #   "name": "string",         # Optional: User name
+        #   "email": "string",        # Optional: User email
+        #   "password": "string",     # Optional: User password
+        #   "lastLogin": "string",    # Optional: Last login timestamp
+        #   "loginAttempts": "number" # Optional: Login attempts
+        # }
         # ============================================================================
         
         self.cache_table = ddb.Table(
@@ -55,6 +66,50 @@ class WordMunchStack(Stack):
         
         # Add tags
         self._apply_common_tags(self.cache_table, {"Purpose": "cache"})
+
+        # Users Table for authentication
+        self.users_table = ddb.Table(
+            self, "UsersTable",
+            table_name=f"{self.project_name}-users-{self.env_name}",
+            partition_key=ddb.Attribute(
+                name="email",
+                type=ddb.AttributeType.STRING
+            ),
+            billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,  # Enable backup for user data
+        )
+        
+        # Add tags
+        self._apply_common_tags(self.users_table, {"Purpose": "user-auth"})
+
+        # ============================================================================
+        # SQS Queue for Cognitive Data Processing
+        # ============================================================================
+        
+        # Dead Letter Queue for failed cognitive data processing
+        self.cognitive_dlq = sqs.Queue(
+            self, "CognitiveDLQ",
+            queue_name=f"{self.project_name}-cognitive-dlq-{self.env_name}",
+            retention_period=Duration.days(14),  # Keep failed messages for 14 days
+            visibility_timeout=Duration.seconds(300)
+        )
+        
+        # Main cognitive data processing queue
+        self.cognitive_data_queue = sqs.Queue(
+            self, "CognitiveDataQueue", 
+            queue_name=f"{self.project_name}-cognitive-data-{self.env_name}",
+            visibility_timeout=Duration.seconds(300),  # 5 minutes for processing
+            retention_period=Duration.days(7),  # Keep messages for 7 days
+            dead_letter_queue=sqs.DeadLetterQueue(
+                max_receive_count=3,  # Retry failed messages 3 times
+                queue=self.cognitive_dlq
+            )
+        )
+        
+        # Add tags
+        self._apply_common_tags(self.cognitive_data_queue, {"Purpose": "cognitive-processing"})
+        self._apply_common_tags(self.cognitive_dlq, {"Purpose": "cognitive-processing-dlq"})
 
         # ============================================================================
         # IAM Roles and Policies
@@ -79,7 +134,9 @@ class WordMunchStack(Stack):
                     ],
                     resources=[
                         self.cache_table.table_arn,
-                        f"{self.cache_table.table_arn}/index/*"
+                        f"{self.cache_table.table_arn}/index/*",
+                        self.users_table.table_arn,
+                        f"{self.users_table.table_arn}/index/*"
                     ]
                 )
             ]
@@ -114,6 +171,45 @@ class WordMunchStack(Stack):
         )
         # grant lambda role to access bedrock
         bedrock_policy.attach_to_role(self.lambda_execution_role)
+
+        # SQS Access Policy - Allow Lambda functions to send/receive SQS messages
+        sqs_policy = iam.Policy(
+            self, "SQSAccessPolicy",
+            policy_name="SQSAccess",
+            statements=[
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "sqs:SendMessage",
+                        "sqs:ReceiveMessage",
+                        "sqs:DeleteMessage",
+                        "sqs:GetQueueAttributes"
+                    ],
+                    resources=[
+                        f"arn:aws:sqs:{Stack.of(self).region}:{Stack.of(self).account}:{self.project_name}-*-{self.env_name}"
+                    ]
+                )
+            ]
+        )
+        # grant lambda role to access SQS
+        sqs_policy.attach_to_role(self.lambda_execution_role)
+
+        # CloudWatch Custom Metrics Policy - Allow Lambda functions to send custom metrics
+        cloudwatch_policy = iam.Policy(
+            self, "CloudWatchCustomMetricsPolicy",
+            policy_name="CloudWatchCustomMetrics",
+            statements=[
+                iam.PolicyStatement(
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "cloudwatch:PutMetricData"
+                    ],
+                    resources=["*"]
+                )
+            ]
+        )
+        # grant lambda role to send custom metrics to CloudWatch
+        cloudwatch_policy.attach_to_role(self.lambda_execution_role)
 
         # ============================================================================
         # Lambda Functions - word-muncher
@@ -200,7 +296,8 @@ class WordMunchStack(Stack):
                 "PROJECT_NAME": self.project_name,
                 "CACHE_TABLE_NAME": self.cache_table.table_name,
                 "CACHE_ENABLED": "true",
-                "SERVICE_TYPE": "concept-muncher"
+                "SERVICE_TYPE": "concept-muncher",
+                "COGNITIVE_QUEUE_URL": self.cognitive_data_queue.queue_url
             }
         )
 
@@ -273,6 +370,56 @@ class WordMunchStack(Stack):
         self._apply_common_tags(self.cognitive_profile_lambda, {
             "Service": "cognitive-profile",
             "Purpose": "cognitive-profile"
+        })
+
+        # Add SQS event source to cognitive profile Lambda
+        self.cognitive_profile_lambda.add_event_source(
+            lambda_event_sources.SqsEventSource(
+                self.cognitive_data_queue,
+                batch_size=10,  # Process up to 10 messages at once
+                max_batching_window=Duration.seconds(5),  # Wait max 5 seconds to fill batch
+                report_batch_item_failures=True  # Enable partial batch failure handling
+            )
+        )
+
+        # ============================================================================
+        # Lambda Functions - user-auth
+        # ============================================================================
+
+        # Create a Lambda Layer for PyJWT
+        pyjwt_layer = _lambda.LayerVersion(
+            self, "PyJWTLayer",
+            layer_version_name=f"{self.project_name}-pyjwt-layer-{self.env_name}",
+            code=_lambda.Code.from_asset(os.path.join(lambda_dir, 'layers', 'jwt-layer')),
+            compatible_runtimes=[_lambda.Runtime.PYTHON_3_11],
+            description="Layer for PyJWT library"
+        )
+
+        # User Authentication Lambda Function
+        self.user_auth_lambda = _lambda.Function(
+            self, "UserAuthLambda",
+            function_name=f"{self.project_name}-user-auth-{self.env_name}",
+            description="User Authentication Service",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            code=_lambda.Code.from_asset(lambda_dir),
+            handler="user_auth_lambda.lambda_handler",
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            environment={
+                "ENVIRONMENT": self.env_name,
+                "PROJECT_NAME": self.project_name,
+                "USERS_TABLE_NAME": self.users_table.table_name,
+                "JWT_SECRET": "word-munch-secret-key-change-in-production",
+                "JWT_EXPIRY_DAYS": "30"
+            },
+            role=self.lambda_execution_role,
+            layers=[pyjwt_layer]
+        )
+
+        # Add tags
+        self._apply_common_tags(self.user_auth_lambda, {
+            "Service": "user-auth", 
+            "Purpose": "authentication"
         })
 
         # ============================================================================
@@ -427,6 +574,46 @@ class WordMunchStack(Stack):
         )
         print("Created API endpoint: /cognitive-profile")   
 
+        # User Authentication API Endpoint
+        user_auth_resource = self.api.root.add_resource("user-auth")
+        
+        # Integrate with Lambda function
+        user_auth_integration = apigw.LambdaIntegration(
+            self.user_auth_lambda
+        )
+
+        # POST method for user-auth
+        user_auth_resource.add_method(
+            "POST",
+            user_auth_integration,
+            authorization_type=apigw.AuthorizationType.NONE, # no authorization
+            api_key_required=False,
+            request_models={
+                "application/json": apigw.Model.EMPTY_MODEL
+            },
+            method_responses=[
+                apigw.MethodResponse(
+                    status_code="200",
+                    response_models={
+                        "application/json": apigw.Model.EMPTY_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="400", # client error   
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                ),
+                apigw.MethodResponse(
+                    status_code="500", # server error
+                    response_models={
+                        "application/json": apigw.Model.ERROR_MODEL
+                    }
+                )
+            ]
+        )
+        print("Created API endpoint: /user-auth")
+
         # ============================================================================
         # Outputs
         # ============================================================================
@@ -455,6 +642,22 @@ class WordMunchStack(Stack):
             export_name=f"{self.project_name}-concept-muncher-url-{self.env_name}"
         )
         
+        # Cognitive Profile URL
+        CfnOutput(
+            self, "CognitiveProfileUrl",
+            value=f"{self.api.url}cognitive-profile",
+            description="Cognitive Profile Service URL - User Cognitive Analysis Service",
+            export_name=f"{self.project_name}-cognitive-profile-url-{self.env_name}"
+        )
+        
+        # User Authentication URL
+        CfnOutput(
+            self, "UserAuthUrl",
+            value=f"{self.api.url}user-auth",
+            description="User Authentication Service URL - Registration and Login Service",
+            export_name=f"{self.project_name}-user-auth-url-{self.env_name}"
+        )
+        
         # DynamoDB Table Name
         CfnOutput(
             self, "CacheTableName",
@@ -462,15 +665,42 @@ class WordMunchStack(Stack):
             description="Cache DynamoDB Table Name",
             export_name=f"{self.project_name}-cache-table-{self.env_name}"
         )
+        
+        # Users Table Name
+        CfnOutput(
+            self, "UsersTableName",
+            value=self.users_table.table_name,
+            description="Users DynamoDB Table Name",
+            export_name=f"{self.project_name}-users-table-{self.env_name}"
+        )
+        
+        # Cognitive Data Queue URL
+        CfnOutput(
+            self, "CognitiveQueueUrl",
+            value=self.cognitive_data_queue.queue_url,
+            description="Cognitive Data Processing SQS Queue URL",
+            export_name=f"{self.project_name}-cognitive-queue-url-{self.env_name}"
+        )
+
+        # CloudWatch Dashboard URL
+        CfnOutput(
+            self, "AnalyticsDashboardUrl",
+            value=f"https://console.aws.amazon.com/cloudwatch/home?region={self.region}#dashboards:name={self.project_name}-user-analytics-{self.env_name}",
+            description="CloudWatch Analytics Dashboard URL - User Invocation Analytics (Excluding Warm-up)",
+            export_name=f"{self.project_name}-analytics-dashboard-url-{self.env_name}"
+        )
 
         # ============================================================================
         # CloudWatch Alarms for Lambda, API Gateway, Bedrock
         # ============================================================================
 
-        # Word Muncher Lambda Invocations Alarm
+        # Word Muncher Lambda Invocations Alarm (excluding warm-up)
         word_muncher_lambda_invocations_metric = self.word_muncher_lambda.metric_invocations(
             period=Duration.minutes(5),
-            statistic="Sum"
+            statistic="Sum",
+            dimensions_map={
+                "warmer": "false"  # Exclude warm-up invocations
+            }
         )
         word_muncher_lambda_alarm = cloudwatch.Alarm(
             self, "WordMuncherLambdaInvocationsAlarm",
@@ -482,10 +712,13 @@ class WordMunchStack(Stack):
             alarm_description="Alarm when Lambda invocations exceed 100 in 5 minutes"
         )
 
-        # Concept Muncher Lambda Invocations Alarm 
+        # Concept Muncher Lambda Invocations Alarm (excluding warm-up)
         concept_muncher_lambda_invocations_metric = self.concept_muncher_lambda.metric_invocations(
             period=Duration.minutes(5),
-            statistic="Sum"
+            statistic="Sum",
+            dimensions_map={
+                "warmer": "false"  # Exclude warm-up invocations
+            }
         )
         concept_muncher_lambda_alarm = cloudwatch.Alarm(
             self, "ConceptMuncherLambdaInvocationsAlarm",
@@ -495,84 +728,6 @@ class WordMunchStack(Stack):
             datapoints_to_alarm=1,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             alarm_description="Alarm when Concept Muncher Lambda invocations exceed 100 in 5 minutes"
-        )
-
-        # API Gateway Invocations Alarm
-        api_invoke_metric = cloudwatch.Metric(
-            namespace="AWS/WordMunchApiGateway",
-            metric_name="Count",
-            dimensions_map={
-                "ApiName": f"{self.project_name}-api-{self.env_name}"
-            },
-            period=Duration.minutes(5),
-            statistic="Sum"
-        )
-        api_alarm = cloudwatch.Alarm(
-            self, "ApiGatewayInvocationsAlarm",
-            metric=api_invoke_metric,
-            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
-            evaluation_periods=1,
-            datapoints_to_alarm=1,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            alarm_description="Alarm when API Gateway invocations exceed 100 in 5 minutes"
-        )
-
-        # Bedrock InvocationCount Alarm (global, all models)
-        bedrock_metric = cloudwatch.Metric(
-            namespace="AWS/WordMunchBedrock",
-            metric_name="InvocationCount",
-            period=Duration.minutes(5),
-            statistic="Sum"
-        )
-        bedrock_alarm = cloudwatch.Alarm(
-            self, "BedrockInvocationAlarm",
-            metric=bedrock_metric,
-            threshold=100,  # Alarm if more than 100 invocations in 5 minutes
-            evaluation_periods=1,
-            datapoints_to_alarm=1,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            alarm_description="Alarm when Bedrock invocations exceed 100 in 5 minutes"
-        )
-
-        # DynamoDB ConsumedReadCapacityUnits Alarm
-        dynamodb_read_metric = cloudwatch.Metric(
-            namespace="AWS/DynamoDB",
-            metric_name="ConsumedReadCapacityUnits",
-            dimensions_map={
-                "TableName": self.cache_table.table_name
-            },
-            period=Duration.minutes(5),
-            statistic="Sum"
-        )
-        dynamodb_read_alarm = cloudwatch.Alarm(
-            self, "DynamoDBReadCapacityAlarm",
-            metric=dynamodb_read_metric,
-            threshold=100,  # Alarm if more than 100 read units in 5 minutes
-            evaluation_periods=1,
-            datapoints_to_alarm=1,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            alarm_description="Alarm when DynamoDB ConsumedReadCapacityUnits exceed 100 in 5 minutes"
-        )
-
-        # DynamoDB ConsumedWriteCapacityUnits Alarm
-        dynamodb_write_metric = cloudwatch.Metric(
-            namespace="AWS/DynamoDB",
-            metric_name="ConsumedWriteCapacityUnits",
-            dimensions_map={
-                "TableName": self.cache_table.table_name
-            },
-            period=Duration.minutes(5),
-            statistic="Sum"
-        )
-
-        dynamodb_write_alarm = cloudwatch.Alarm(
-            self, "DynamoDBWriteCapacityAlarm",
-            metric=dynamodb_write_metric,
-            threshold=500,  # allow normal cache operations but detect abnormal cases
-            evaluation_periods=2,  # increase to 2 periods to avoid occasional peak triggers
-            datapoints_to_alarm=2,  # need 2 consecutive data points to exceed threshold to alarm
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            alarm_description="Alarm when DynamoDB ConsumedWriteCapacityUnits exceed 500 in 10 minutes (2 consecutive periods)"
         )
 
         # =========================================================================
@@ -588,10 +743,195 @@ class WordMunchStack(Stack):
         # Bind all alarms to SNS Topic
         word_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
         concept_muncher_lambda_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
-        api_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
-        bedrock_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
-        dynamodb_read_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
-        dynamodb_write_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+
+        # =========================================================================
+        # CloudWatch Dashboard for User Invocation Analytics
+        # =========================================================================
+        
+        # Create CloudWatch Dashboard
+        dashboard = cloudwatch.Dashboard(
+            self, "UserInvocationDashboard",
+            dashboard_name=f"{self.project_name}-user-analytics-{self.env_name}",
+            period_override=cloudwatch.PeriodOverride.AUTO,
+            start="-PT24H"  # Show last 24 hours by default
+        )
+        
+        # Word Muncher User Invocations Widget (excluding warm-up)
+        word_muncher_user_invocations_widget = cloudwatch.GraphWidget(
+            title="Word Muncher - User Invocations (Excluding Warm-up)",
+            left=[
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Invocations",
+                    dimensions_map={
+                        "FunctionName": self.word_muncher_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="All Invocations"
+                ),
+                # Create a custom metric to track only user invocations
+                cloudwatch.MathExpression(
+                    expression="m1",
+                    label="User Invocations Only",
+                    using_metrics={
+                        "m1": cloudwatch.Metric(
+                            namespace="WordMunch/Analytics",
+                            metric_name="UserInvocations",
+                            dimensions_map={
+                                "Service": "word-muncher",
+                                "Environment": self.env_name
+                            },
+                            statistic="Sum"
+                        )
+                    }
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(5)
+        )
+        
+        # Concept Muncher User Invocations Widget (excluding warm-up)
+        concept_muncher_user_invocations_widget = cloudwatch.GraphWidget(
+            title="Concept Muncher - User Invocations (Excluding Warm-up)",
+            left=[
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Invocations", 
+                    dimensions_map={
+                        "FunctionName": self.concept_muncher_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="All Invocations"
+                ),
+                cloudwatch.MathExpression(
+                    expression="m1",
+                    label="User Invocations Only",
+                    using_metrics={
+                        "m1": cloudwatch.Metric(
+                            namespace="WordMunch/Analytics",
+                            metric_name="UserInvocations",
+                            dimensions_map={
+                                "Service": "concept-muncher",
+                                "Environment": self.env_name
+                            },
+                            statistic="Sum"
+                        )
+                    }
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(5)
+        )
+        
+        # Lambda Duration Comparison Widget
+        lambda_duration_widget = cloudwatch.GraphWidget(
+            title="Lambda Function Duration Comparison",
+            left=[
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Duration",
+                    dimensions_map={
+                        "FunctionName": self.word_muncher_lambda.function_name
+                    },
+                    statistic="Average",
+                    label="Word Muncher Avg Duration"
+                ),
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda", 
+                    metric_name="Duration",
+                    dimensions_map={
+                        "FunctionName": self.concept_muncher_lambda.function_name
+                    },
+                    statistic="Average",
+                    label="Concept Muncher Avg Duration"
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(5)
+        )
+        
+        # Error Rate Widget
+        lambda_errors_widget = cloudwatch.GraphWidget(
+            title="Lambda Function Error Rates",
+            left=[
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Errors",
+                    dimensions_map={
+                        "FunctionName": self.word_muncher_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="Word Muncher Errors"
+                ),
+                cloudwatch.Metric(
+                    namespace="AWS/Lambda",
+                    metric_name="Errors", 
+                    dimensions_map={
+                        "FunctionName": self.concept_muncher_lambda.function_name
+                    },
+                    statistic="Sum",
+                    label="Concept Muncher Errors"
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(5)
+        )
+        
+        # Usage Statistics Widget (Custom Metrics)
+        usage_stats_widget = cloudwatch.GraphWidget(
+            title="User Activity Statistics",
+            left=[
+                cloudwatch.Metric(
+                    namespace="WordMunch/Analytics",
+                    metric_name="AnonymousUsers",
+                    dimensions_map={
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Anonymous User Requests"
+                ),
+                cloudwatch.Metric(
+                    namespace="WordMunch/Analytics", 
+                    metric_name="RegisteredUsers",
+                    dimensions_map={
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Registered User Requests"
+                ),
+                cloudwatch.Metric(
+                    namespace="WordMunch/Analytics",
+                    metric_name="RateLimitHits",
+                    dimensions_map={
+                        "Environment": self.env_name
+                    },
+                    statistic="Sum",
+                    label="Rate Limit Hits"
+                )
+            ],
+            width=12,
+            height=6,
+            period=Duration.minutes(15)
+        )
+        
+        # Add widgets to dashboard
+        dashboard.add_widgets(
+            word_muncher_user_invocations_widget,
+            concept_muncher_user_invocations_widget,
+            lambda_duration_widget,
+            lambda_errors_widget,
+            usage_stats_widget
+        )
+        
+        # Add tags to dashboard
+        self._apply_common_tags(dashboard, {
+            "Purpose": "user-analytics",
+            "Service": "monitoring"
+        })
 
     def _apply_common_tags(self, resource, additional_tags=None):
         """Apply common tags to a resource"""

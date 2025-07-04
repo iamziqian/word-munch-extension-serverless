@@ -26,6 +26,7 @@ CACHE_TTL = 604800   # 7 days in seconds
 _bedrock_client = None
 _dynamodb_resource = None
 _cache_table = None
+_cloudwatch_client = None
 
 def get_bedrock_client():
     """Lazy load Bedrock client with connection reuse"""
@@ -44,6 +45,15 @@ def get_dynamodb_resource():
         _dynamodb_resource = boto3.resource('dynamodb')
         logger.info("DynamoDB resource initialized successfully")
     return _dynamodb_resource
+
+def get_cloudwatch_client():
+    """Lazy load CloudWatch client with connection reuse"""
+    global _cloudwatch_client
+    if _cloudwatch_client is None:
+        logger.info("Initializing CloudWatch client (lazy loading)...")
+        _cloudwatch_client = boto3.client('cloudwatch', region_name='us-east-1')
+        logger.info("CloudWatch client initialized successfully")
+    return _cloudwatch_client
 
 def get_cache_table():
     """Lazy load cache table with connection reuse"""
@@ -66,6 +76,7 @@ def warm_up_function():
         bedrock_client = get_bedrock_client()
         dynamodb_resource = get_dynamodb_resource()
         cache_table = get_cache_table()
+        cloudwatch_client = get_cloudwatch_client()
         
         # Skip all test operations to minimize warm-up time and cost
         # Clients are now initialized and ready for actual API calls
@@ -225,9 +236,14 @@ def lambda_handler(event, context):
         
         # Check anonymous user rate limiting
         user_id = extract_user_id_from_event(event)
-        if is_anonymous_user(event):
+        is_anonymous = is_anonymous_user(event)
+        
+        if is_anonymous:
             rate_limit_result = check_anonymous_user_rate_limit(user_id)
             if not rate_limit_result['allowed']:
+                # Send metrics for rate limit hit
+                send_custom_metrics('anonymous', rate_limit_hit=True)
+                
                 return {
                     'statusCode': 429,
                     'headers': {
@@ -243,6 +259,10 @@ def lambda_handler(event, context):
                         'error_code': 'RATE_LIMIT_EXCEEDED'
                     })
                 }
+        
+        # Send custom metrics for user invocations (excluding warm-up)
+        user_type = 'anonymous' if is_anonymous else 'registered'
+        send_custom_metrics(user_type)
         
         # Check cache if enabled
         cache_key = None
@@ -282,7 +302,7 @@ def lambda_handler(event, context):
             cache_result(cache_key, synonyms)
         
         # Record usage for anonymous users (after successful analysis)
-        if is_anonymous_user(event):
+        if is_anonymous:
             record_anonymous_user_usage(user_id)
         
         return {
@@ -561,3 +581,78 @@ def get_tomorrow_timestamp():
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     tomorrow_midnight = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(tomorrow_midnight.timestamp())
+
+def send_custom_metrics(user_type: str, rate_limit_hit: bool = False):
+    """Send custom metrics to CloudWatch for analytics"""
+    try:
+        cloudwatch = get_cloudwatch_client()
+        
+        # Prepare metric data
+        metric_data = [
+            {
+                'MetricName': 'UserInvocations',
+                'Dimensions': [
+                    {
+                        'Name': 'Service',
+                        'Value': 'word-muncher'
+                    },
+                    {
+                        'Name': 'Environment',
+                        'Value': ENVIRONMENT or 'dev'
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count'
+            }
+        ]
+        
+        # Add user type specific metrics
+        if user_type == 'anonymous':
+            metric_data.append({
+                'MetricName': 'AnonymousUsers',
+                'Dimensions': [
+                    {
+                        'Name': 'Environment',
+                        'Value': ENVIRONMENT or 'dev'
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count'
+            })
+        else:
+            metric_data.append({
+                'MetricName': 'RegisteredUsers',
+                'Dimensions': [
+                    {
+                        'Name': 'Environment',
+                        'Value': ENVIRONMENT or 'dev'
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count'
+            })
+        
+        # Add rate limit metric if applicable
+        if rate_limit_hit:
+            metric_data.append({
+                'MetricName': 'RateLimitHits',
+                'Dimensions': [
+                    {
+                        'Name': 'Environment',
+                        'Value': ENVIRONMENT or 'dev'
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count'
+            })
+        
+        # Send metrics to CloudWatch
+        cloudwatch.put_metric_data(
+            Namespace='WordMunch/Analytics',
+            MetricData=metric_data
+        )
+        
+        logger.info(f"Sent custom metrics to CloudWatch: user_type={user_type}, rate_limit_hit={rate_limit_hit}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to send custom metrics to CloudWatch: {e}")
