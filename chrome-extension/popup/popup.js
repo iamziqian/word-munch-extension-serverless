@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Update status display
         if (status) {
-            status.textContent = isEnabled ? '扩展已启用' : '扩展已禁用';
+            status.textContent = isEnabled ? 'Extension Enabled' : 'Extension Disabled';
             status.style.color = isEnabled ? '#28a745' : '#dc3545';
         }
         
@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update status display
                 if (status) {
                     const isEnabled = extensionToggle.checked;
-                    status.textContent = isEnabled ? '扩展已启用' : '扩展已禁用';
+                    status.textContent = isEnabled ? 'Extension Enabled' : 'Extension Disabled';
                     status.style.color = isEnabled ? '#28a745' : '#dc3545';
                 }
             }
@@ -495,7 +495,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => messageEl.remove(), 3000);
     }
 
-    // 阅读模式按钮事件
+    // Reader mode button event
     const readerModeBtn = document.getElementById('reader-mode-btn');
     if (readerModeBtn) {
         readerModeBtn.addEventListener('click', function() {

@@ -1,4 +1,44 @@
-/* ========== Word Munch Content Script style - optimized version ========== */
+/* === Performance optimizations for dragging === */
+.wm-dragging {
+    /* Strong GPU acceleration */
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    
+    /* Reduce repaints and reflows */
+    pointer-events: none;
+    contain: layout style paint;
+    
+    /* Optimize rendering */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    
+    /* Force layer creation */
+    isolation: isolate;
+}
+
+.wm-dragging * {
+    /* Disable pointer events on children during drag */
+    pointer-events: none;
+    /* Prevent text selection during drag */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.wm-dragging .wm-header-text.drag-handle {
+    /* Keep handle interactive */
+    pointer-events: auto;
+}
+
+/* Pre-optimize the floating widget for potential dragging */
+.word-munch-floating-widget {
+    /* Prepare for GPU acceleration */
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+}
 
 /* === CSS variable definition === */
 :root {
@@ -912,7 +952,7 @@
     color: var(--wm-text-primary);
 }
 
-/* 分段模式样式 */
+/* Segmented mode styles */
 #word-munch-reader-container .reader-content.chunked-mode {
     padding: 20px 40px;
 }
@@ -1162,7 +1202,7 @@
     }
 }
 
-/* === 打印样式 === */
+/* === Print styles === */
 @media print {
     .word-munch-floating-widget,
     .word-munch-segment-highlight,
@@ -1171,7 +1211,7 @@
     }
 }
 
-/* === 暗色主题支持 === */
+/* === Dark theme support === */
 @media (prefers-color-scheme: dark) {
     :root {
         --wm-text-primary: #e2e8f0;
