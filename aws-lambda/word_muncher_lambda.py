@@ -3,6 +3,8 @@ import json
 import os
 import logging
 import time
+import hashlib
+import datetime
 from botocore.exceptions import ClientError
 from typing import Optional, Dict, Any
 
@@ -221,6 +223,27 @@ def lambda_handler(event, context):
                 })
             }
         
+        # Check anonymous user rate limiting
+        user_id = extract_user_id_from_event(event)
+        if is_anonymous_user(event):
+            rate_limit_result = check_anonymous_user_rate_limit(user_id)
+            if not rate_limit_result['allowed']:
+                return {
+                    'statusCode': 429,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'error': 'Daily usage limit exceeded',
+                        'message': 'Anonymous users are limited to 10 word muncher analyses per day',
+                        'usage_count': rate_limit_result['current_count'],
+                        'limit': rate_limit_result['daily_limit'],
+                        'reset_time': rate_limit_result['reset_time'],
+                        'error_code': 'RATE_LIMIT_EXCEEDED'
+                    })
+                }
+        
         # Check cache if enabled
         cache_key = None
         cached_result = None
@@ -257,6 +280,10 @@ def lambda_handler(event, context):
         # Cache result if enabled
         if CACHE_ENABLED and cache_key:
             cache_result(cache_key, synonyms)
+        
+        # Record usage for anonymous users (after successful analysis)
+        if is_anonymous_user(event):
+            record_anonymous_user_usage(user_id)
         
         return {
             'statusCode': 200,
@@ -374,3 +401,163 @@ Return only JSON array: ["synonym1", "synonym2", "synonym3", "synonym4", "synony
     except (ClientError, Exception) as e:
         logger.error(f"ERROR: Can't invoke '{model_id}'. Reason: {e}")
         raise
+
+def extract_user_id_from_event(event):
+    """Extract user ID from event"""
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    # For registered users, use JWT token
+    if auth_header.startswith('Bearer '):
+        return 'user_' + hashlib.md5(auth_header.encode()).hexdigest()[:8]
+    
+    # For anonymous users, try to get client-generated anonymous ID from request body
+    try:
+        if isinstance(event.get('body'), str):
+            body = json.loads(event['body'])
+        else:
+            body = event.get('body', {})
+        
+        # Check if frontend provided anonymous_user_id
+        anonymous_id = body.get('anonymous_user_id')
+        if anonymous_id and isinstance(anonymous_id, str) and len(anonymous_id) > 0:
+            # Validate and sanitize the anonymous ID
+            clean_id = ''.join(c for c in anonymous_id if c.isalnum() or c in '-_')[:50]
+            if len(clean_id) >= 8:  # Minimum length requirement
+                return f'anon_{clean_id}'
+        
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+    
+    # Fallback: use a combination of User-Agent and other stable headers
+    user_agent = headers.get('User-Agent', 'unknown')
+    accept_language = headers.get('Accept-Language', '')
+    accept_encoding = headers.get('Accept-Encoding', '')
+    
+    # Create a more stable fingerprint
+    fingerprint_data = f"{user_agent}|{accept_language}|{accept_encoding}"
+    fingerprint_hash = hashlib.md5(fingerprint_data.encode()).hexdigest()[:12]
+    
+    return f'anon_{fingerprint_hash}'
+
+def is_anonymous_user(event):
+    """Check if the user is anonymous (no Authorization header)"""
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    # Primary check: no Bearer token
+    if auth_header.startswith('Bearer '):
+        return False
+    
+    # Secondary check: if anonymous_user_id is provided in request body
+    try:
+        if isinstance(event.get('body'), str):
+            body = json.loads(event['body'])
+        else:
+            body = event.get('body', {})
+        
+        anonymous_id = body.get('anonymous_user_id')
+        if anonymous_id and isinstance(anonymous_id, str):
+            return True  # Has anonymous ID, definitely anonymous
+            
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        pass
+    
+    return True  # Default to anonymous if no Bearer token
+
+def check_anonymous_user_rate_limit(user_id):
+    """Check if anonymous user has exceeded daily rate limit"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, allowing request")
+            return {'allowed': True, 'current_count': 0, 'daily_limit': 10, 'reset_time': get_tomorrow_timestamp()}
+        
+        # Generate today's rate limit key
+        today = time.strftime('%Y-%m-%d')
+        rate_limit_key = f"rate_limit_word_muncher_{user_id}_{today}"
+        
+        # Try to get current usage count
+        response = cache_table.get_item(Key={'cacheKey': rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        daily_limit = 10
+        allowed = current_count < daily_limit
+        
+        logger.info(f"Anonymous user {user_id[:8]}... word muncher usage check: {current_count}/{daily_limit}")
+        
+        return {
+            'allowed': allowed,
+            'current_count': current_count,
+            'daily_limit': daily_limit,
+            'reset_time': get_tomorrow_timestamp()
+        }
+        
+    except Exception as e:
+        logger.error(f"Rate limit check failed for user {user_id}: {e}")
+        # On error, allow the request but log the issue
+        return {'allowed': True, 'current_count': 0, 'daily_limit': 10, 'reset_time': get_tomorrow_timestamp()}
+
+def record_anonymous_user_usage(user_id):
+    """Record usage for anonymous user"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, cannot record usage")
+            return
+        
+        # Generate today's rate limit key
+        today = time.strftime('%Y-%m-%d')
+        rate_limit_key = f"rate_limit_word_muncher_{user_id}_{today}"
+        
+        # Try to get current usage count
+        response = cache_table.get_item(Key={'cacheKey': rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        # Increment count
+        new_count = current_count + 1
+        
+        # Calculate TTL for tomorrow midnight (auto cleanup)
+        tomorrow_timestamp = get_tomorrow_timestamp()
+        
+        # Store updated count
+        cache_table.put_item(
+            Item={
+                'cacheKey': rate_limit_key,
+                'data': json.dumps({
+                    'count': new_count,
+                    'user_id': user_id,
+                    'date': today,
+                    'last_used': int(time.time())
+                }, ensure_ascii=False),
+                'ttl': tomorrow_timestamp,
+                'timestamp': int(time.time()),
+                'provider': 'rate_limiter',
+                'model': 'word_muncher_daily_limit'
+            }
+        )
+        
+        logger.info(f"Recorded word muncher usage for anonymous user {user_id[:8]}...: {new_count}/10")
+        
+    except Exception as e:
+        logger.warning(f"Failed to record usage for anonymous user {user_id}: {e}")
+
+def get_tomorrow_timestamp():
+    """Get timestamp for tomorrow midnight (for TTL)"""
+    tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
+    tomorrow_midnight = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(tomorrow_midnight.timestamp())
