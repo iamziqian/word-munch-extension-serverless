@@ -66,9 +66,11 @@ Result: 95% of mental resources dedicated to actual thinking instead of grunt wo
 ### Architecture Overview
 
 ```
-Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB
-                                        ↓
-                                Bedrock Models (Nova, Titan, Claude)
+Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
+                                         ↓
+                                 Bedrock Models (Nova, Titan, Claude)
+                                         ↓
+                                CloudWatch Monitoring
 ```
 
 **Scale:** 5,655 lines frontend + 4,268 lines backend = **9,923 lines total**
