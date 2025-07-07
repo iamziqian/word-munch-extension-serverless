@@ -87,7 +87,7 @@ Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
 - **Lazy Loading** - on-demand client initialization
 - **Connection Reuse** - 4 cached clients across invocations  
 - **EventBridge Warming** - 3-minute cycles to prevent cold starts
-- **3-layer frontend caching** (Memory → Data → IndexedDB) for 99% hit rate
+- **3-layer frontend caching** (Memory → IndexedDB → DynamoDB) for 99% hit rate
 
 ### Production Monitoring
 
@@ -223,7 +223,7 @@ def should_trigger_claude(user_text, comprehension_score, difficulty_level, cont
 ### 🚀 **Overall Architecture**
 - **68% faster response time** (898ms → 287ms)
 - **Zero cold starts** via EventBridge warming ($0.02/month)
-- **99% hit rate** with 3-layer frontend caching (Memory → Data → IndexedDB)
+- **99% hit rate** with 3-layer caching (Memory → IndexedDB → DynamoDB)
 - **Production-grade**: 9,923 lines across 5 Lambda functions
 
 ### 🔒 **Anonymous Rate Limiting**
