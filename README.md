@@ -152,7 +152,7 @@ Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
 
 **Key Finding:** Nova Micro achieved highest accuracy (84.7%) while being 4.3x cheaper than GPT-4o Mini and 37x cheaper than Claude.
 
-### Key Challenges Solved
+## 🗡️ Key Challenges Solved
 
 **Challenge 1: Anonymous Rate Limiting**
 - Problem: Potential $1000+ daily bills from spam attacks
