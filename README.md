@@ -67,6 +67,13 @@ Track your reading patterns → understand your learning style
   <img src="assets/user_cognitive_pattern_overview.gif" alt="User Cognitive Pattern Overview" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
 </div>
 
+#### 6. **Real-time CloudWatch Dashboard** - Production Monitoring
+Tracking user activity across all 5 Lambda functions
+
+<div align="center">
+  <img src="assets/cloudwatch_dashboard.png" alt="CloudWatch Dashboard" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
+
 ## 🚀 Quick Start
 
 1. **[Install from Chrome Store](https://chromewebstore.google.com/detail/word-munch/kkcmcbpndfgiainfpocpoajlhalpiodl)**
