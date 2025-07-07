@@ -38,7 +38,7 @@ Transform any webpage into an intelligent reading companion with **five AI-power
 |-----------|-------------|----------|------------|---------|
 | **Unknown words** | Copy → Google | Complex explanations | Click → Simple synonyms | 📈 **Build on existing knowledge** |
 | **Complex concepts** | Copy → ChatGPT | AI explains for you | You explain → Get feedback | 📈 **Active thinking** |
-| **Finding info** | Ctrl+F → Miss content | AI scans and answer all | Ask questions → Locate answers | 📈 **Deeper understanding** |
+| **Finding info** | Ctrl+F → Miss content | AI scans doc and answers questions | Ask questions → Locate answers | 📈 **Deeper understanding** |
 | **Long articles** | Read all → Overload | AI creates summary | One-click chunking | 📈 **Manageable pace** |
 
 **Key Differentiator:** Makes you smarter, not lazier—AI enhances your brain instead of replacing it.
