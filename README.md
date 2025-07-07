@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/word_muncher_logo.png" alt="Word Munch Logo" width="80"/>
+  <img src="assets/word_muncher_logo.png" alt="Word Munch Logo" width="100"/>
   
   # Word Munch
   
@@ -35,32 +35,37 @@ Digital archaeology: endless scrolling, Ctrl+F battles, re-reading entire sectio
 #### 1. **Word Muncher** - Context-Aware Vocabulary
 Click unknown words → get simplified, context-aware synonyms → connect to what you already know
 
-![Word Muncher Service](assets/word_muncher_service.gif)
+<div align="center">
+  <img src="assets/word_muncher_service.gif" alt="Word Muncher Service" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
 
-### 🧠 **Concept Muncher**  
+#### 2. **Concept Muncher** - Comprehension Verification
 Write your understanding → get instant feedback → know if you really get it
 
-![Concept Muncher Service](assets/concept_muncher_service.gif)
+<div align="center">
+  <img src="assets/concept_muncher_service.gif" alt="Concept Muncher Service" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
 
-### 🔍 **Semantic Search**
+#### 3. **Semantic Search** - Intelligent Content Discovery
 Ask questions → find answers by meaning (not just keywords)
 
-![Semantic Search Service](assets/semantic_search_service.gif)
+<div align="center">
+  <img src="assets/semantic_search_service.gif" alt="Semantic Search Service" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
 
-### 📖 **Chunk Reading**
+#### 4. **Chunk Reading** - Cognitive Load Management
 Long articles → bite-sized pieces → no cognitive overload
 
-![Optional Chunk Reading Mode](assets/optional_chunk_reading_mode.gif)
+<div align="center">
+  <img src="assets/optional_chunk_reading_mode.gif" alt="Optional Chunk Reading Mode" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
 
-### 📊 **Learning Insights**
+#### 5. **Learning Insights** - Personal Analytics
 Track your reading patterns → understand your learning style
 
-![User Cognitive Pattern Overview](assets/user_cognitive_pattern_overview.gif)
-
-### ⏰ **Real-time CloudWatch Dashboard**
-tracking user activity across Lambda functions
-
-![Cloudwatch Dashboard](assets/cloudwatch_dashboard.png)
+<div align="center">
+  <img src="assets/user_cognitive_pattern_overview.gif" alt="User Cognitive Pattern Overview" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
+</div>
 
 ## 🚀 Quick Start
 
