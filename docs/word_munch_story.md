@@ -253,9 +253,10 @@ def should_trigger_claude(user_text, comprehension_score, difficulty_level, cont
 ## What I learned
 
 - **🧠 AI Augmentation > Replacement**: AI retrieves, humans think
-- **🎯 Knowledge Bridging**: Connect unknown to known ("Authentication" = "check")
-- **💰 Cost Intelligence > Model Power**: Smart triggering beats more AI
+- **🔄 Blue-Green Deployment > Perfect Planning**: Question why prod alias exists, aliases enable fearless deployment
 - **🚀 Lambda = Human Cognition**: Reading patterns match serverless scaling
+- **💰 Cost Intelligence > Model Power**: Smart triggering beats more AI
+- **🎯 Knowledge Bridging**: Connect unknown to known ("Authentication" = "check")
 
 ---
 
