@@ -300,6 +300,34 @@ class WordMunchStack(Stack):
                 "COGNITIVE_QUEUE_URL": self.cognitive_data_queue.queue_url
             }
         )
+        
+        # Create Lambda Version for Blue-Green Deployment - default latest version
+        self.concept_muncher_version = _lambda.Version(
+            self, "ConceptMuncherVersion",
+            lambda_=self.concept_muncher_lambda,
+            removal_policy=RemovalPolicy.RETAIN  # Keep old versions for rollback
+        )
+        
+        # Create Blue Alias (Production)
+        self.concept_muncher_blue_alias = _lambda.Alias(
+            self, "ConceptMuncherBlueAlias",
+            alias_name="blue",
+            version=self.concept_muncher_version # point to latest version
+        )
+        
+        # Create Green Alias (Staging/New Version) - initially points to same version
+        self.concept_muncher_green_alias = _lambda.Alias(
+            self, "ConceptMuncherGreenAlias",
+            alias_name="green",
+            version=self.concept_muncher_version # point to latest version
+        )
+        
+        # Create Production Alias - initially 100% traffic goes to blue
+        self.concept_muncher_prod_alias = _lambda.Alias(
+            self, "ConceptMuncherProdAlias",
+            alias_name="prod",
+            version=self.concept_muncher_version
+        )
 
         # Add tags
         self._apply_common_tags(self.concept_muncher_lambda, {
@@ -527,9 +555,9 @@ class WordMunchStack(Stack):
         # Concept Muncher API Endpoint
         concept_muncher_resource = self.api.root.add_resource("concept-muncher")
         
-        # Integrate with Lambda function
+        # Integrate with Lambda Prod Alias (for Blue-Green deployment)
         concept_muncher_integration = apigw.LambdaIntegration(
-            self.concept_muncher_lambda
+            self.concept_muncher_prod_alias
         )
 
         # POST method for concept-muncher
