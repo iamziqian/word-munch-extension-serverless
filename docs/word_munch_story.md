@@ -60,11 +60,10 @@ Word Munch finds the right information and transforms it into digestible form—
 ### Architecture Overview
 
 ```
-Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
-                                         ↓
-                                 Bedrock Models (Nova, Titan, Claude)
-                                         ↓
-                                CloudWatch Monitoring
+Chrome Extension → API Gateway → Lambda Aliases → 5 Lambda Functions → DynamoDB
+     ↓                  ↓         (Blue/Green/Prod)         ↓                ↑
+Memory → IndexedDB → Cache     CloudWatch      EventBridge Warmup    Bedrock Models
+                              Monitoring       (every 3 mins)      (Nova, Titan, Claude)
 ```
 
 ### Why Lambda is Perfect for This Problem
