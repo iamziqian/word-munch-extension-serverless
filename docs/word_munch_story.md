@@ -16,7 +16,7 @@ Digital archaeology: endless scrolling, Ctrl+F battles, re-reading entire sectio
 
 **The irony:** I was using AI to think for me, then using my brain to do what computers excel at.
 
-Word Munch fixes this: **AI handles information retrieval while your mind focuses on actual thinking.**
+Word Munch fixes this: **AI handles information retrieval and digestion while your mind focuses on actual thinking.**
 
 ---
 
