@@ -1150,14 +1150,45 @@ def lambda_handler(event, context):
                     })
                 }
         
-        # Handle skeleton-only requests first (no rate limiting for lightweight skeleton extraction)
+        # Handle skeleton-only requests with lighter rate limiting
         if skeleton_only:
-            logger.info('Processing skeleton-only request (no rate limiting)')
+            logger.info('Processing skeleton-only request')
+            
+            # Apply lighter rate limiting for skeleton-only requests
+            user_id = extract_user_id_from_event(event)
+            is_anonymous = is_anonymous_user(event)
+            
+            if is_anonymous:
+                skeleton_rate_limit_result = check_anonymous_skeleton_rate_limit(user_id)
+                if not skeleton_rate_limit_result['allowed']:
+                    # Send metrics for skeleton rate limit hit
+                    send_custom_metrics('anonymous', skeleton_rate_limit_hit=True)
+                    
+                    return {
+                        'statusCode': 429,
+                        'headers': {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*'
+                        },
+                        'body': json.dumps({
+                            'error': 'Daily skeleton extraction limit exceeded',
+                            'message': f'Anonymous users are limited to {skeleton_rate_limit_result["daily_limit"]} skeleton extractions per day',
+                            'usage_count': skeleton_rate_limit_result['current_count'],
+                            'limit': skeleton_rate_limit_result['daily_limit'],
+                            'reset_time': skeleton_rate_limit_result['reset_time'],
+                            'error_code': 'SKELETON_RATE_LIMIT_EXCEEDED',
+                            'user_friendly_message': f'You\'ve reached your daily limit of {skeleton_rate_limit_result["daily_limit"]} sentence simplifications. Please try again tomorrow!'
+                        })
+                    }
             
             try:
                 # Initialize analyzer for skeleton extraction only
                 analyzer = TextComprehensionAnalyzer()
                 skeleton_result = analyzer.extract_sentence_skeleton(original_text)
+                
+                # Record skeleton usage for anonymous users
+                if is_anonymous:
+                    record_anonymous_skeleton_usage(user_id)
                 
                 return {
                     'statusCode': 200,
@@ -1506,13 +1537,104 @@ def record_anonymous_user_usage(user_id):
     except Exception as e:
         logger.warning(f"Failed to record usage for anonymous user {user_id}: {e}")
 
+def check_anonymous_skeleton_rate_limit(user_id):
+    """Check if anonymous user has exceeded daily skeleton extraction rate limit"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, allowing skeleton request")
+            return {'allowed': True, 'current_count': 0, 'daily_limit': 20, 'reset_time': get_tomorrow_timestamp()}
+        
+        # Generate today's skeleton rate limit key
+        today = time.strftime('%Y-%m-%d')
+        skeleton_rate_limit_key = f"skeleton_limit_anonymous_{user_id}_{today}"
+        
+        # Try to get current skeleton usage count
+        response = cache_table.get_item(Key={'cacheKey': skeleton_rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        daily_limit = 5  # 5 skeleton extractions per day for anonymous users
+        allowed = current_count < daily_limit
+        
+        logger.info(f"Anonymous user {user_id[:8]}... skeleton usage check: {current_count}/{daily_limit}")
+        
+        return {
+            'allowed': allowed,
+            'current_count': current_count,
+            'daily_limit': daily_limit,
+            'reset_time': get_tomorrow_timestamp()
+        }
+        
+    except Exception as e:
+        logger.error(f"Skeleton rate limit check failed for user {user_id}: {e}")
+        # On error, allow the request but log the issue
+        return {'allowed': True, 'current_count': 0, 'daily_limit': 20, 'reset_time': get_tomorrow_timestamp()}
+
+def record_anonymous_skeleton_usage(user_id):
+    """Record skeleton extraction usage for anonymous user"""
+    try:
+        cache_table = get_cache_table()
+        if not cache_table:
+            logger.warning("Cache table not available, cannot record skeleton usage")
+            return
+        
+        # Generate today's skeleton rate limit key
+        today = time.strftime('%Y-%m-%d')
+        skeleton_rate_limit_key = f"skeleton_limit_anonymous_{user_id}_{today}"
+        
+        # Try to get current skeleton usage count
+        response = cache_table.get_item(Key={'cacheKey': skeleton_rate_limit_key})
+        
+        current_count = 0
+        if 'Item' in response:
+            try:
+                data = json.loads(response['Item']['data'])
+                current_count = data.get('count', 0)
+            except (json.JSONDecodeError, KeyError):
+                current_count = 0
+        
+        # Increment skeleton count
+        new_count = current_count + 1
+        
+        # Calculate TTL for tomorrow midnight (auto cleanup)
+        tomorrow_timestamp = get_tomorrow_timestamp()
+        
+        # Store updated skeleton count
+        cache_table.put_item(
+            Item={
+                'cacheKey': skeleton_rate_limit_key,
+                'data': json.dumps({
+                    'count': new_count,
+                    'user_id': user_id,
+                    'date': today,
+                    'last_used': int(time.time())
+                }, ensure_ascii=False),
+                'ttl': tomorrow_timestamp,
+                'timestamp': int(time.time()),
+                'provider': 'skeleton_rate_limiter',
+                'model': 'anonymous_skeleton_daily_limit'
+            }
+        )
+        
+        logger.info(f"Recorded skeleton usage for anonymous user {user_id[:8]}...: {new_count}/20")
+        
+    except Exception as e:
+        logger.warning(f"Failed to record skeleton usage for anonymous user {user_id}: {e}")
+
 def get_tomorrow_timestamp():
     """Get timestamp for tomorrow midnight (for TTL)"""
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     tomorrow_midnight = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(tomorrow_midnight.timestamp())
 
-def send_custom_metrics(user_type: str, rate_limit_hit: bool = False):
+def send_custom_metrics(user_type: str, rate_limit_hit: bool = False, skeleton_rate_limit_hit: bool = False):
     """Send custom metrics to CloudWatch for analytics"""
     try:
         cloudwatch = get_cloudwatch_client()
@@ -1576,13 +1698,27 @@ def send_custom_metrics(user_type: str, rate_limit_hit: bool = False):
                 'Unit': 'Count'
             })
         
+        # Add skeleton rate limit metric if applicable
+        if skeleton_rate_limit_hit:
+            metric_data.append({
+                'MetricName': 'SkeletonRateLimitHits',
+                'Dimensions': [
+                    {
+                        'Name': 'Environment',
+                        'Value': os.environ.get('ENVIRONMENT', 'dev')
+                    }
+                ],
+                'Value': 1,
+                'Unit': 'Count'
+            })
+        
         # Send metrics to CloudWatch
         cloudwatch.put_metric_data(
             Namespace='WordMunch/Analytics',
             MetricData=metric_data
         )
         
-        logger.info(f"Sent custom metrics to CloudWatch: user_type={user_type}, rate_limit_hit={rate_limit_hit}")
+        logger.info(f"Sent custom metrics to CloudWatch: user_type={user_type}, rate_limit_hit={rate_limit_hit}, skeleton_rate_limit_hit={skeleton_rate_limit_hit}")
         
     except Exception as e:
         logger.warning(f"Failed to send custom metrics to CloudWatch: {e}")

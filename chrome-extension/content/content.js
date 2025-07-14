@@ -2426,23 +2426,93 @@ class ConceptAnalyzer {
         if (resultsEl) {
             resultsEl.style.display = 'block';
             
-            // Provide more user-friendly error messages
-            let userFriendlyError = 'Unable to extract skeleton';
-            if (error.includes('403') || error.includes('Authentication')) {
-                userFriendlyError = 'Authentication issue - please check configuration';
-            } else if (error.includes('timeout') || error.includes('TIMEOUT')) {
-                userFriendlyError = 'Request timeout - please try again';
-            } else if (error.includes('Connection failed')) {
-                userFriendlyError = 'Connection failed - please check your internet';
+            // Parse detailed error information
+            let userFriendlyError = 'Unable to extract sentence skeleton';
+            let showRetry = 'refresh'; // All skeleton errors should refresh page
+            let showRefresh = false;
+            let errorIcon = '⚠️';
+            
+            // Try to parse structured error response
+            try {
+                if (error.includes('{') && error.includes('}')) {
+                    const jsonMatch = error.match(/\{.*\}/);
+                    if (jsonMatch) {
+                        const errorData = JSON.parse(jsonMatch[0]);
+                        
+                        // Handle rate limit errors specifically
+                        if (errorData.error_code === 'SKELETON_RATE_LIMIT_EXCEEDED') {
+                            userFriendlyError = errorData.user_friendly_message || 
+                                `You've reached your daily limit of ${errorData.limit} sentence simplifications. Please try again tomorrow!`;
+                            showRetry = 'refresh'; // retry mode that refreshes page
+                            showRefresh = false;
+                            errorIcon = '🚫';
+                        } else if (errorData.user_friendly_message) {
+                            userFriendlyError = errorData.user_friendly_message;
+                        } else if (errorData.error) {
+                            userFriendlyError = errorData.error;
+                        }
+                    }
+                }
+            } catch (parseError) {
+                console.log('Could not parse error JSON, using fallback messages');
             }
             
-            resultsEl.innerHTML = `
-                <div class="skeleton-error">
-                    <span class="skeleton-error-icon">⚠️</span>
-                    <span class="skeleton-error-text">${userFriendlyError}</span>
+            // Fallback error message handling
+            if (userFriendlyError === 'Unable to extract sentence skeleton') {
+                if (error.includes('429')) {
+                    userFriendlyError = 'Daily limit reached. Please try again tomorrow!';
+                    showRetry = 'refresh'; // Special retry mode that refreshes page
+                    showRefresh = false;
+                    errorIcon = '🚫';
+                } else if (error.includes('403') || error.includes('Authentication')) {
+                    userFriendlyError = 'Authentication issue - please refresh the page';
+                    // Keep showRetry = 'refresh' for consistency
+                } else if (error.includes('timeout') || error.includes('TIMEOUT')) {
+                    userFriendlyError = 'Request timeout - please try again';
+                    // Keep showRetry = 'refresh' for consistency
+                } else if (error.includes('Connection failed')) {
+                    userFriendlyError = 'Connection failed - please check your internet';
+                    // Keep showRetry = 'refresh' for consistency
+                }
+            }
+            
+            // Build action buttons
+            let actionButtons = '';
+            if (showRetry === 'refresh') {
+                // Special case: rate limiting - show red retry button but refresh page
+                actionButtons += `
+                    <button class="skeleton-retry-btn" onclick="window.location.reload()">
+                        🔄 Retry
+                    </button>
+                `;
+            } else if (showRetry === true) {
+                actionButtons += `
                     <button class="skeleton-retry-btn" onclick="window.retrySkeletonExtraction()">
                         🔄 Retry
                     </button>
+                `;
+            }
+            if (showRefresh) {
+                actionButtons += `
+                    <button class="skeleton-refresh-btn" onclick="window.location.reload()">
+                        🔃 Refresh Page
+                    </button>
+                `;
+            }
+            
+            // Determine error type for styling
+            let errorType = 'general';
+            if (error.includes('429') || userFriendlyError.includes('daily limit') || userFriendlyError.includes('Daily limit')) {
+                errorType = 'rate-limit';
+            }
+            
+            resultsEl.innerHTML = `
+                <div class="skeleton-error" data-error-type="${errorType}">
+                    <span class="skeleton-error-icon">${errorIcon}</span>
+                    <span class="skeleton-error-text">${userFriendlyError}</span>
+                    <div class="skeleton-error-actions">
+                        ${actionButtons}
+                    </div>
                 </div>
             `;
         }

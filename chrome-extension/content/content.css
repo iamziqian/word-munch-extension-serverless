@@ -2446,3 +2446,168 @@
     color: #374151;
     flex: 1;
 }
+
+/* === Skeleton Error Handling Styles === */
+.skeleton-error {
+    padding: 16px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 1px solid #f87171;
+    border-radius: 8px;
+    color: #dc2626;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 8px 0;
+    box-shadow: 0 2px 12px rgba(248, 113, 113, 0.2);
+    animation: slideInError 0.3s ease-out;
+}
+
+@keyframes slideInError {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.skeleton-error-icon {
+    font-size: 18px;
+    align-self: flex-start;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+}
+
+.skeleton-error-text {
+    line-height: 1.5;
+    color: #991b1b;
+    font-weight: 600;
+}
+
+.skeleton-error-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+    justify-content: flex-start;
+}
+
+.skeleton-retry-btn, .skeleton-refresh-btn {
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 90px;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.skeleton-retry-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.skeleton-retry-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.skeleton-retry-btn:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+}
+
+.skeleton-retry-btn:hover::before {
+    left: 100%;
+}
+
+.skeleton-retry-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.skeleton-refresh-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.skeleton-refresh-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.skeleton-refresh-btn:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+.skeleton-refresh-btn:hover::before {
+    left: 100%;
+}
+
+.skeleton-refresh-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* Rate limit specific styling - using red retry style */
+.skeleton-error[data-error-type="rate-limit"] {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border: 1px solid #ef4444;
+    color: #dc2626;
+    box-shadow: 0 2px 12px rgba(239, 68, 68, 0.2);
+}
+
+.skeleton-error[data-error-type="rate-limit"] .skeleton-error-text {
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+.skeleton-error[data-error-type="rate-limit"] .skeleton-error-icon {
+    animation: shake 1s infinite;
+    color: #ef4444;
+}
+
+@keyframes pulse-info {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
