@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/🎬%20Watch%20Demo-FF6B6B?style=for-the-badge" alt="Watch Demo"/>
   </a>
   
-  *Click • Understand • Learn*
+  *• Click • Retrieve • Simplify • Understand*
 </div>
 
 ## 🎯 The Problem
@@ -30,9 +30,13 @@ Digital archaeology: endless scrolling, Ctrl+F battles, re-reading entire sectio
 
 **The irony:** Using AI to think for you, then using your brain to do what computers excel at.
 
-**Word Munch fixes this:** AI handles information retrieval while your mind focuses on actual thinking.
+**Word Munch fixes this:** AI handles information retrieval and digestion while your mind focuses on actual thinking.
 
 ## ✨ Features
+
+### 🤖 **Word Munch: The Information Retrieval and Digestion Tool**
+
+Word Munch finds the right information and transforms it into digestible form—so you can focus on understanding and high-level thinking.
 
 ### 🧠 Five Smart Reading Tools
 
@@ -44,7 +48,7 @@ Click unknown words → get simplified, context-aware synonyms → connect to wh
 </div>
 
 #### 2. **Concept Muncher** - Comprehension Verification
-Write your understanding → get instant feedback → know if you really get it
+Write your understanding → get instant feedback + simplified sentence structure → know if you really get it
 
 <div align="center">
   <img src="assets/concept_muncher_service.gif" alt="Concept Muncher Service" width="600" style="max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0;"/>
@@ -89,20 +93,20 @@ No setup required!
 
 ## 🎯 Why It Works
 
-| Traditional Reading | Word Munch |
-|-------------------|------------|
-| Copy → New tab → Google | Click → Instant meaning |
-| ChatGPT explains everything | You explain → Get feedback |
-| Ctrl+F keyword hunt | Semantic search |
-| Read everything → Overwhelm | Smart chunking |
+| Cognitive Task | Traditional Reading | AI-Only Tools | Word Munch Division | Result |
+|----------------|-------------------|---------------|-------------------|---------|
+| **Unknown words** | Stop, search, lose flow | AI explains, you stay passive | AI simplifies → You connect | 📈 **Knowledge bridges** |
+| **Complex concepts** | Re-read, get confused | AI thinks for you | You think → AI gives feedback + simplified sentence structure | 📈 **Active learning** |
+| **Finding info** | Ctrl+F, miss context | AI scans doc and answers | You ask questions → AI locates answers → You analyze | 📈 **Deep comprehension** |
+| **Long articles** | Overwhelm or quit | AI summarizes, you miss nuance | AI chunks → You digest | 📈 **Sustained focus** |
 
-**Key difference:** Makes you smarter, not lazier.
+**Key Innovation:** Perfect cognitive division of labor—AI handles information retrieval and simplification, you handle information understanding and analysis.
 
 ## 🔬 The Science
 
-**Cognitive Load Theory:** 70% of reading energy wasted on basic processing.
+**Cognitive Load Theory:** 70% of reading energy wasted on mechanical processing tasks.
 
-**Word Munch's fix:** Systematic cognitive offloading.
+**Word Munch's fix:** Systematic cognitive offloading of low-level tasks (vocabulary lookup, sentence parsing, information location, content chunking) so 95% of your mental resources go to actual understanding and insight generation.
 
 **Result:** 95% mental resources for actual thinking.
 
@@ -131,7 +135,7 @@ Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
 | Function | Model | Memory | Lines | Purpose |
 |----------|-------|--------|-------|---------|
 | **Word Muncher** | Nova Micro | 512MB | 658 | Simplify context-aware synonyms |
-| **Concept Muncher** | Titan v2 + Claude | 1024MB | 1,274 | Comprehension gap analysis |
+| **Concept Muncher** | Titan v2 + Claude | 1024MB | 1,274 | Comprehension analysis + simplified sentence structure |
 | **Semantic Search** | Titan v2 | 1024MB | 568 | Document semantic search |
 | **Cognitive Profile** | Analytics | 1024MB | 1,217 | Learning patterns |
 | **User Auth** | JWT | 512MB | 551 | Security |
@@ -192,7 +196,7 @@ Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
 
 **Next:** PDF support, Cross-document search, Voice input
 
-**Vision:** Effortless comprehension across all content types.
+**Vision:** Effortless comprehension across all languages and cultures.
 
 ## 💬 Support
 
