@@ -1865,53 +1865,56 @@ class ContentTemplates {
                     <button class="wm-close-btn">×</button>
                 </div>
                 
-                <!-- Skeleton extraction section (auto-displayed) -->
-                <div class="concept-skeleton-section">
-                    <div class="concept-section-label">🔍 Sentence Skeleton</div>
-                    <div class="concept-skeleton-loading">
-                        <div class="wm-spinner-small"></div>
-                        <span>Extracting skeleton...</span>
+                <!-- Scrollable content area -->
+                <div class="concept-scrollable-content">
+                    <!-- Skeleton extraction section (auto-displayed) -->
+                    <div class="concept-skeleton-section">
+                        <div class="concept-section-label">🔍 Sentence Skeleton</div>
+                        <div class="concept-skeleton-loading">
+                            <div class="wm-spinner-small"></div>
+                            <span>Extracting skeleton...</span>
+                        </div>
+                        <div class="concept-skeleton-results" style="display: none;">
+                            <!-- Skeleton results will be populated here -->
+                        </div>
                     </div>
-                    <div class="concept-skeleton-results" style="display: none;">
-                        <!-- Skeleton results will be populated here -->
+                    
+                    <!-- User understanding input -->
+                    <div class="concept-understanding-section">
+                        <div class="concept-section-label">✍️ Your Understanding</div>
+                        <div class="concept-input-container">
+                            <textarea 
+                                class="concept-input-minimal" 
+                                placeholder="Looking at the sentence skeleton above, explain your understanding of the main idea..."
+                                rows="3"
+                            ></textarea>
+                            <div class="input-helper-text">💡 Use the skeleton structure to guide your response</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading state -->
+                    <div class="concept-loading-minimal" style="display: none;">
+                        <div class="wm-spinner"></div>
+                        <span>Analyzing comprehension...</span>
+                    </div>
+                    
+                    <!-- Results display -->
+                    <div class="concept-results-minimal" style="display: none;">
+                        <!-- Results will be populated here -->
+                    </div>
+                    
+                    <!-- Error display -->
+                    <div class="concept-error-minimal" style="display: none;">
+                        <!-- Error messages display here -->
                     </div>
                 </div>
                 
-                <!-- User understanding input -->
-                <div class="concept-understanding-section">
-                    <div class="concept-section-label">✍️ Your Understanding</div>
-                    <div class="concept-input-container">
-                        <textarea 
-                            class="concept-input-minimal" 
-                            placeholder="Looking at the sentence skeleton above, explain your understanding of the main idea..."
-                            rows="3"
-                        ></textarea>
-                        <div class="input-helper-text">💡 Use the skeleton structure to guide your response</div>
-                    </div>
-                </div>
-                
-                <!-- Action section -->
+                <!-- Action section (fixed at bottom) -->
                 <div class="concept-action-minimal">
                     <button class="wm-btn wm-btn-primary concept-analyze-btn-minimal" disabled>
                         Analyze Understanding
                     </button>
                     <div class="concept-cost-minimal-improved">~$0.00003</div>
-                </div>
-                
-                <!-- Loading state -->
-                <div class="concept-loading-minimal" style="display: none;">
-                    <div class="wm-spinner"></div>
-                    <span>Analyzing comprehension...</span>
-                </div>
-                
-                <!-- Results display -->
-                <div class="concept-results-minimal" style="display: none;">
-                    <!-- Results will be populated here -->
-                </div>
-                
-                <!-- Error display -->
-                <div class="concept-error-minimal" style="display: none;">
-                    <!-- Error messages display here -->
                 </div>
             </div>
         `;

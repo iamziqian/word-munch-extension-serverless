@@ -113,6 +113,8 @@
     max-height: 80vh;
     overflow-y: auto;
     width: 400px;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Ensure floating window is displayed above reading mode */
@@ -1129,6 +1131,11 @@
     
     .word-munch-floating-widget.concept-mode {
         width: 90vw !important;
+        max-height: 85vh !important;
+    }
+    
+    .concept-scrollable-content {
+        max-height: calc(85vh - 100px) !important; /* Account for header and action bar */
     }
     
     .concept-stats {
@@ -2008,8 +2015,11 @@
     border-radius: 8px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     max-width: 400px;
-    overflow: hidden;
     border: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 /* Header - Consistent with word muncher window */
@@ -2026,6 +2036,7 @@
     user-select: none;
     flex-wrap: wrap;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0; /* Prevent shrinking */
 }
 
 .concept-icon {
@@ -2210,6 +2221,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0; /* Prevent shrinking */
+    margin-top: auto; /* Push to bottom */
 }
 
 .concept-analyze-btn-minimal {
@@ -2610,4 +2623,43 @@
         transform: scale(1.1);
         opacity: 0.8;
     }
+}
+
+/* Scrollable content area for concept muncher */
+.concept-scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    max-height: calc(80vh - 60px); /* Subtract header height */
+}
+
+.concept-scrollable-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.concept-scrollable-content::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+}
+
+.concept-scrollable-content::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.concept-scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Ensure content sections have proper spacing */
+.concept-skeleton-section,
+.concept-understanding-section {
+    padding: 16px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.concept-skeleton-section:last-child,
+.concept-understanding-section:last-child {
+    border-bottom: none;
 }
