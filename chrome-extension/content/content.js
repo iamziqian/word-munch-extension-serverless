@@ -3419,6 +3419,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     ResultDisplayer.initializeStyles();
+    
+    // Initialize standalone semantic search
+    initializeStandaloneSearch();
 });
 
 if (document.readyState !== 'loading') {
@@ -3435,6 +3438,9 @@ if (document.readyState !== 'loading') {
             type: 'CONTENT_SCRIPT_READY',
             url: window.location.href
         });
+        
+        // Initialize standalone semantic search
+        initializeStandaloneSearch();
     }, 1000); // Give more time for extension to prepare
 }
 
@@ -3448,6 +3454,12 @@ window.addEventListener('beforeunload', function() {
     console.log('Word Munch: Page unload, clear highlight resources');
     HighlightManager.stopScrollTracking();
     HighlightManager.clearOriginalHighlights();
+    
+    // Clean up standalone semantic search
+    if (standaloneSemanticSearch) {
+        standaloneSemanticSearch.clearLocationHighlights();
+        standaloneSemanticSearch.destroy();
+    }
 });
 
 console.log('Word Munch: Content script initialization complete');
@@ -6044,3 +6056,1289 @@ class CognitiveDashboard {
 window.cognitiveDashboard = new CognitiveDashboard();
 
 console.log('Word Munch: CognitiveDashboard loaded');
+
+// === Standalone Semantic Search Manager ===
+class StandaloneSemanticSearch {
+    constructor() {
+        this.isActive = false;
+        this.button = null;
+        this.panel = null;
+        this.currentChunks = [];
+        this.isProcessing = false;
+        
+        this.init();
+    }
+
+    init() {
+        this.createFloatingButton();
+        this.bindEvents();
+    }
+
+    createFloatingButton() {
+        // Create floating search button
+        this.button = document.createElement('div');
+        this.button.id = 'word-munch-standalone-search-btn';
+        this.button.innerHTML = '🔍 Smart Search';
+        this.button.title = 'Search this page content semantically';
+        
+        // Position button at top-right
+        Object.assign(this.button.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            zIndex: '10001',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            padding: '12px 16px',
+            borderRadius: '25px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+            border: 'none',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            transition: 'all 0.3s ease',
+            userSelect: 'none',
+            opacity: '0.9'
+        });
+
+        // Hover effects
+        this.button.addEventListener('mouseenter', () => {
+            this.button.style.transform = 'translateY(-2px)';
+            this.button.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)';
+            this.button.style.opacity = '1';
+        });
+
+        this.button.addEventListener('mouseleave', () => {
+            this.button.style.transform = 'translateY(0)';
+            this.button.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)';
+            this.button.style.opacity = '0.9';
+        });
+
+        document.body.appendChild(this.button);
+    }
+
+    createSearchPanel() {
+        this.panel = document.createElement('div');
+        this.panel.id = 'word-munch-standalone-search-panel';
+        
+        this.panel.innerHTML = `
+            <div class="standalone-search-container">
+                <div class="search-header">
+                    <h3>🔍 Smart Page Search</h3>
+                    <button class="close-btn">×</button>
+                </div>
+                
+                <div class="search-body">
+                    <div class="chunk-status">
+                        <div class="status-indicator">📄</div>
+                        <div class="status-text">Analyzing page content...</div>
+                    </div>
+                    
+                    <div class="search-controls" style="display: none;">
+                        <div class="search-input-container">
+                            <input type="text" class="search-input" placeholder="Ask a question about this page..." maxlength="200">
+                            <button class="search-btn">Search</button>
+                        </div>
+                        <div class="chunk-info">
+                            <span class="chunk-count">0 chunks ready</span>
+                            <button class="chunk-page-btn">📑 Chunk Page</button>
+                        </div>
+                    </div>
+                    
+                    <div class="search-results-container">
+                        <!-- Search results will appear here -->
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Apply styles
+        Object.assign(this.panel.style, {
+            position: 'fixed',
+            top: '70px',
+            right: '20px',
+            width: '400px',
+            maxHeight: '600px',
+            zIndex: '10002',
+            background: 'white',
+            borderRadius: '16px',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+            border: '1px solid #e1e5e9',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            display: 'none',
+            overflow: 'hidden'
+        });
+
+        document.body.appendChild(this.panel);
+        
+        // Apply internal styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .standalone-search-container {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+            
+            .search-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 16px 20px;
+                border-bottom: 1px solid #e1e5e9;
+                background: #f8f9fa;
+            }
+            
+            .search-header h3 {
+                margin: 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #2d3748;
+            }
+            
+            .close-btn {
+                background: none;
+                border: none;
+                font-size: 18px;
+                cursor: pointer;
+                color: #718096;
+                padding: 4px 8px;
+                border-radius: 4px;
+            }
+            
+            .close-btn:hover {
+                background: #e2e8f0;
+                color: #2d3748;
+            }
+            
+            .search-body {
+                padding: 16px 20px 20px 20px;
+                overflow-y: auto;
+                max-height: 500px;
+            }
+            
+            .chunk-status {
+                display: flex;
+                align-items: center;
+                padding: 16px;
+                background: #f7fafc;
+                border-radius: 8px;
+                margin-bottom: 16px;
+            }
+            
+            .status-indicator {
+                font-size: 20px;
+                margin-right: 12px;
+            }
+            
+            .status-text {
+                font-size: 14px;
+                color: #4a5568;
+            }
+            
+            .search-input-container {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+            
+            .search-input {
+                flex: 1;
+                padding: 12px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                font-size: 14px;
+                outline: none;
+            }
+            
+            .search-input:focus {
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+            
+            .search-btn {
+                padding: 12px 20px;
+                background: #667eea;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            
+            .search-btn:hover {
+                background: #5a67d8;
+            }
+            
+            .search-btn:disabled {
+                background: #cbd5e0;
+                cursor: not-allowed;
+            }
+            
+            .chunk-info {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 13px;
+                color: #4a5568;
+                padding: 8px 12px;
+                background: #f7fafc;
+                border-radius: 6px;
+                margin-top: 8px;
+                border: 1px solid #e2e8f0;
+            }
+            
+            .chunk-count {
+                font-weight: 600;
+                color: #2d3748;
+            }
+            
+            .chunk-page-btn {
+                padding: 6px 12px;
+                background: #edf2f7;
+                color: #4a5568;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            
+            .chunk-page-btn:hover {
+                background: #e2e8f0;
+            }
+            
+            .search-results-container {
+                margin-top: 16px;
+            }
+            
+            .search-result-item {
+                padding: 16px;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                background: white;
+            }
+            
+            .result-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            
+            .result-number {
+                background: #667eea;
+                color: white;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            
+            .similarity-score {
+                font-size: 12px;
+                color: #718096;
+            }
+            
+            .result-content {
+                font-size: 14px;
+                line-height: 1.6;
+                color: #2d3748;
+            }
+            
+            .search-loading {
+                text-align: center;
+                padding: 20px;
+                color: #718096;
+            }
+            
+            .search-error {
+                padding: 16px;
+                background: #fed7d7;
+                color: #c53030;
+                border-radius: 8px;
+                font-size: 14px;
+            }
+            
+            .no-results {
+                text-align: center;
+                padding: 20px;
+                color: #718096;
+                font-style: italic;
+            }
+            
+            .search-results-header h4 {
+                margin: 0 0 16px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: #2d3748;
+                padding: 12px 16px;
+                background: #f7fafc;
+                border-radius: 8px;
+                border-left: 4px solid #667eea;
+            }
+            
+            .locate-btn {
+                padding: 4px 8px;
+                background: #4ade80;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            
+            .locate-btn:hover {
+                background: #22c55e;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+            }
+            
+            .search-result-item:hover {
+                background: #f8fafc;
+                border-color: #667eea;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            }
+            
+            .search-result-item {
+                transition: all 0.2s ease;
+            }
+        `;
+        
+        document.head.appendChild(style);
+    }
+
+    bindEvents() {
+        // Button click to show/hide panel
+        this.button.addEventListener('click', () => {
+            this.togglePanel();
+        });
+
+        // Document click to handle outside clicks
+        document.addEventListener('click', (e) => {
+            if (this.isActive && 
+                !this.panel.contains(e.target) && 
+                !this.button.contains(e.target)) {
+                this.hidePanel();
+            }
+        });
+    }
+
+    async togglePanel() {
+        if (this.isActive) {
+            this.hidePanel();
+        } else {
+            await this.showPanel();
+        }
+    }
+
+    async showPanel() {
+        if (!this.panel) {
+            this.createSearchPanel();
+        }
+
+        this.panel.style.display = 'block';
+        this.isActive = true;
+        
+        // Update button state
+        this.button.innerHTML = '✕ Close Search';
+        this.button.style.background = '#e53e3e';
+
+        // Start page analysis
+        await this.analyzePageContent();
+        
+        // Bind panel events
+        this.bindPanelEvents();
+    }
+
+    hidePanel() {
+        if (this.panel) {
+            this.panel.style.display = 'none';
+        }
+        this.isActive = false;
+        
+        // Reset button state
+        this.button.innerHTML = '🔍 Smart Search';
+        this.button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    }
+
+    bindPanelEvents() {
+        if (!this.panel) return;
+
+        // Close button
+        const closeBtn = this.panel.querySelector('.close-btn');
+        closeBtn.addEventListener('click', () => this.hidePanel());
+
+        // Search button
+        const searchBtn = this.panel.querySelector('.search-btn');
+        const searchInput = this.panel.querySelector('.search-input');
+        
+        searchBtn.addEventListener('click', () => this.executeSearch());
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.executeSearch();
+            }
+        });
+
+        // Chunk page button
+        const chunkBtn = this.panel.querySelector('.chunk-page-btn');
+        chunkBtn.addEventListener('click', () => this.analyzePageContent(true));
+    }
+
+    async analyzePageContent(forceReload = false) {
+        if (this.isProcessing && !forceReload) return;
+        
+        this.isProcessing = true;
+        
+        const statusIndicator = this.panel.querySelector('.status-indicator');
+        const statusText = this.panel.querySelector('.status-text');
+        const searchControls = this.panel.querySelector('.search-controls');
+        const chunkCount = this.panel.querySelector('.chunk-count');
+
+        // Show loading state
+        statusIndicator.textContent = '⏳';
+        statusText.textContent = 'Extracting page content...';
+        searchControls.style.display = 'none';
+
+        try {
+            // Extract page content
+            const pageText = this.extractPageText();
+            
+            if (!pageText || pageText.length < 100) {
+                throw new Error('Insufficient content found on this page');
+            }
+
+            statusText.textContent = 'Creating semantic chunks...';
+            
+            // Create chunks
+            const chunks = await this.createPageChunks(pageText);
+            
+            if (!chunks || chunks.length === 0) {
+                throw new Error('Failed to create text chunks');
+            }
+
+            this.currentChunks = chunks;
+            
+            // Update semantic search manager
+            semanticSearchManager.setChunks(chunks);
+            
+            // Hide status section and show search controls
+            const statusSection = this.panel.querySelector('.chunk-status');
+            statusSection.style.display = 'none';
+            searchControls.style.display = 'block';
+            chunkCount.textContent = `${chunks.length} chunks ready`;
+
+            // Focus search input
+            setTimeout(() => {
+                this.panel.querySelector('.search-input').focus();
+            }, 100);
+
+        } catch (error) {
+            console.error('Standalone Search: Page analysis failed:', error);
+            
+            // Show error in status section briefly, then hide it
+            statusIndicator.textContent = '❌';
+            statusText.textContent = `Analysis failed: ${error.message}`;
+            
+            // Hide status section after showing error for 3 seconds
+            setTimeout(() => {
+                const statusSection = this.panel.querySelector('.chunk-status');
+                statusSection.style.display = 'none';
+            }, 3000);
+            
+            searchControls.style.display = 'none';
+        } finally {
+            this.isProcessing = false;
+        }
+    }
+
+    extractPageText() {
+        console.log('🔍 Standalone Search: Extracting page text');
+        
+        // Try multiple extraction strategies
+        let pageText = '';
+        
+        // Strategy 1: Use Readability if available
+        if (typeof Readability !== 'undefined') {
+            try {
+                const documentClone = document.cloneNode(true);
+                const reader = new Readability(documentClone, {
+                    debug: false,
+                    charThreshold: 100
+                });
+                const article = reader.parse();
+                if (article && article.textContent) {
+                    pageText = article.textContent;
+                    console.log('✅ Used Readability extraction');
+                }
+            } catch (error) {
+                console.warn('Readability extraction failed:', error);
+            }
+        }
+        
+        // Strategy 2: Extract from main content areas
+        if (!pageText) {
+            const contentSelectors = [
+                'main',
+                'article', 
+                '[role="main"]',
+                '.content',
+                '.post-content',
+                '.article-content',
+                '.entry-content',
+                'body'
+            ];
+            
+            for (const selector of contentSelectors) {
+                const element = document.querySelector(selector);
+                if (element) {
+                    pageText = this.extractTextFromElement(element);
+                    if (pageText.length > 200) {
+                        console.log(`✅ Used selector extraction: ${selector}`);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Strategy 3: Full body text as fallback
+        if (!pageText || pageText.length < 100) {
+            pageText = this.extractTextFromElement(document.body);
+            console.log('✅ Used body text extraction');
+        }
+        
+        console.log(`🔍 Extracted ${pageText.length} characters`);
+        return pageText;
+    }
+
+    extractTextFromElement(element) {
+        // Remove unwanted elements
+        const elementsToRemove = [
+            'script', 'style', 'nav', 'header', 'footer',
+            '.navigation', '.nav', '.menu', '.sidebar',
+            '.advertisement', '.ads', '.social', '.comments'
+        ];
+        
+        const clone = element.cloneNode(true);
+        
+        elementsToRemove.forEach(selector => {
+            const elements = clone.querySelectorAll(selector);
+            elements.forEach(el => el.remove());
+        });
+        
+        // Get text content and clean it
+        let text = clone.textContent || '';
+        
+        // Clean up text
+        text = text
+            .replace(/\s+/g, ' ')  // Replace multiple spaces with single space
+            .replace(/\n+/g, ' ')  // Replace newlines with spaces
+            .trim();
+        
+        return text;
+    }
+
+    async createPageChunks(textContent) {
+        console.log('🔍 Standalone Search: Creating chunks from text');
+        
+        try {
+            // Try semantic chunking first
+            if (typeof window.createFiveLanguageChunker === 'function') {
+                const semanticChunker = window.createFiveLanguageChunker({
+                    targetLength: 600,
+                    maxLength: 800,
+                    minLength: 150
+                });
+                
+                const chunks = await semanticChunker.createChunks(textContent);
+                console.log('✅ Semantic chunking complete:', chunks.length, 'chunks');
+                return chunks;
+            }
+        } catch (error) {
+            console.error('Semantic chunking failed:', error);
+        }
+        
+        // Fallback to simple chunking
+        return this.createSimpleChunks(textContent);
+    }
+
+    createSimpleChunks(textContent) {
+        console.log('🔍 Using fallback chunking method');
+        
+        const sentences = textContent
+            .split(/[.!?。！？]\s+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 20);
+        
+        const chunks = [];
+        let currentChunk = '';
+        const targetLength = 600;
+        
+        for (const sentence of sentences) {
+            const testChunk = currentChunk + (currentChunk ? '. ' : '') + sentence;
+            
+            if (testChunk.length > targetLength && currentChunk) {
+                chunks.push(currentChunk + '.');
+                currentChunk = sentence;
+            } else {
+                currentChunk = testChunk;
+            }
+        }
+        
+        if (currentChunk) {
+            chunks.push(currentChunk + '.');
+        }
+        
+        return chunks.filter(chunk => chunk.length > 50);
+    }
+
+    async executeSearch() {
+        const searchInput = this.panel.querySelector('.search-input');
+        const searchBtn = this.panel.querySelector('.search-btn');
+        const resultsContainer = this.panel.querySelector('.search-results-container');
+        
+        const query = searchInput.value.trim();
+        if (!query) {
+            this.showSearchMessage('Please enter a search query', 'error');
+            return;
+        }
+
+        if (!this.currentChunks || this.currentChunks.length === 0) {
+            this.showSearchMessage('No content chunks available. Please analyze the page first.', 'error');
+            return;
+        }
+
+        console.log('🔍 Executing standalone search:', query);
+        
+        // Show loading state
+        searchBtn.disabled = true;
+        searchBtn.textContent = 'Searching...';
+        resultsContainer.innerHTML = '<div class="search-loading">🔍 Searching for relevant content...</div>';
+
+        try {
+            const searchResult = await semanticSearchManager.searchChunks(query, {
+                top_k: 5,
+                similarity_threshold: 0.2
+            });
+
+            console.log('🔍 Search completed:', searchResult);
+            this.displaySearchResults(searchResult, resultsContainer);
+
+        } catch (error) {
+            console.error('🔍 Search failed:', error);
+            this.showSearchMessage(`Search failed: ${error.message}`, 'error');
+        } finally {
+            searchBtn.disabled = false;
+            searchBtn.textContent = 'Search';
+        }
+    }
+
+    displaySearchResults(searchResult, container) {
+        if (!searchResult.relevant_chunks || searchResult.relevant_chunks.length === 0) {
+            container.innerHTML = '<div class="no-results">No relevant content found. Try a different search query.</div>';
+            return;
+        }
+
+        const resultsHTML = searchResult.relevant_chunks.map((result, index) => {
+            const highlightedContent = this.highlightQueryInText(result.chunk, searchResult.query);
+            return `
+                <div class="search-result-item" data-chunk-text="${this.escapeHtml(result.chunk)}">
+                    <div class="result-header">
+                        <span class="result-number">#${index + 1}</span>
+                        <span class="similarity-score">${(result.similarity * 100).toFixed(1)}% match</span>
+                        <button class="locate-btn" title="Locate in page">📍 Find</button>
+                    </div>
+                    <div class="result-content">
+                        ${highlightedContent}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = `
+            <div class="search-results-header">
+                <h4>🎯 Found ${searchResult.relevant_chunks.length} relevant results</h4>
+            </div>
+            ${resultsHTML}
+        `;
+
+        // Add click handlers for location
+        this.bindLocationEvents(container);
+    }
+
+    highlightQueryInText(text, query) {
+        if (!query) return text;
+        
+        const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        let highlightedText = text;
+        
+        words.forEach(word => {
+            const regex = new RegExp(`(${word})`, 'gi');
+            highlightedText = highlightedText.replace(regex, '<mark style="background: #ffd93d; padding: 1px 2px; border-radius: 2px;">$1</mark>');
+        });
+        
+        return highlightedText;
+    }
+
+    showSearchMessage(message, type = 'info') {
+        const container = this.panel.querySelector('.search-results-container');
+        const className = type === 'error' ? 'search-error' : 'search-info';
+        container.innerHTML = `<div class="${className}">${message}</div>`;
+    }
+
+    bindLocationEvents(container) {
+        const locateButtons = container.querySelectorAll('.locate-btn');
+        locateButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const resultItem = button.closest('.search-result-item');
+                const chunkText = resultItem.getAttribute('data-chunk-text');
+                
+                if (chunkText) {
+                    this.locateTextInPage(chunkText);
+                }
+            });
+        });
+
+        // Also make the entire result item clickable
+        const resultItems = container.querySelectorAll('.search-result-item');
+        resultItems.forEach(item => {
+            item.style.cursor = 'pointer';
+            item.addEventListener('click', (e) => {
+                // Don't trigger if clicking the locate button
+                if (e.target.classList.contains('locate-btn')) return;
+                
+                const chunkText = item.getAttribute('data-chunk-text');
+                if (chunkText) {
+                    this.locateTextInPage(chunkText);
+                }
+            });
+        });
+    }
+
+    locateTextInPage(targetText) {
+        console.log('🎯 Locating text in page:', targetText.substring(0, 50) + '...');
+        
+        // Clear previous highlights
+        this.clearLocationHighlights();
+        
+        // Strategy 1: Exact text match
+        if (this.findAndHighlightExactText(targetText)) {
+            return;
+        }
+        
+        // Strategy 2: Fuzzy matching - try to find partial matches
+        const words = targetText.split(/\s+/).filter(word => word.length > 3);
+        if (words.length >= 3) {
+            // Try to find text with at least 60% of the words
+            const requiredMatches = Math.ceil(words.length * 0.6);
+            if (this.findAndHighlightFuzzyText(words, requiredMatches)) {
+                return;
+            }
+        }
+        
+        // Strategy 3: Find the most similar text block
+        this.findMostSimilarTextBlock(targetText);
+    }
+
+    findAndHighlightExactText(targetText) {
+        // Normalize target text
+        const normalizedTarget = targetText.replace(/\s+/g, ' ').trim();
+        
+        // Strategy 1: Find exact substring matches in page text
+        if (this.findExactSubstring(normalizedTarget)) {
+            return true;
+        }
+        
+        // Strategy 2: Find sentence-level matches
+        if (this.findSentenceMatch(normalizedTarget)) {
+            return true;
+        }
+        
+        // Strategy 3: Find the most similar paragraph
+        if (this.findSimilarParagraph(normalizedTarget)) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    findExactSubstring(targetText) {
+        // Try to find exact substring matches
+        const searchLength = Math.min(targetText.length, 150); // Limit search length
+        const searchText = targetText.substring(0, searchLength);
+        
+        // Get all text content paragraphs
+        const textElements = this.getMainTextElements();
+        
+        for (const element of textElements) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            
+            // Check if this element contains our target text
+            const index = elementText.toLowerCase().indexOf(searchText.toLowerCase());
+            if (index !== -1) {
+                // Found a match, highlight just the matching portion
+                this.highlightExactMatch(element, searchText, index);
+                // Scroll to element after highlighting
+                setTimeout(() => {
+                    this.scrollToElement(element);
+                }, 100);
+                this.showLocationToast('✅ Found exact match');
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    findSentenceMatch(targetText) {
+        // Split target into sentences
+        const targetSentences = targetText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+        if (targetSentences.length === 0) return false;
+        
+        const firstSentence = targetSentences[0];
+        const textElements = this.getMainTextElements();
+        
+        for (const element of textElements) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            
+            // Check if element contains the first sentence
+            if (elementText.toLowerCase().includes(firstSentence.toLowerCase())) {
+                this.highlightExactMatch(element, firstSentence, elementText.toLowerCase().indexOf(firstSentence.toLowerCase()));
+                // Scroll to element after highlighting
+                setTimeout(() => {
+                    this.scrollToElement(element);
+                }, 100);
+                this.showLocationToast('📝 Found sentence match');
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    findSimilarParagraph(targetText) {
+        const textElements = this.getMainTextElements();
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        // Only consider substantial text blocks
+        const minLength = Math.min(50, targetText.length * 0.3);
+        
+        for (const element of textElements) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            if (elementText.length < minLength) continue;
+            
+            const score = this.calculateTextSimilarity(elementText, targetText);
+            if (score > bestScore && score > 0.5) { // Higher threshold
+                bestScore = score;
+                bestMatch = element;
+            }
+        }
+        
+        if (bestMatch && bestScore > 0.5) {
+            this.highlightElement(bestMatch);
+            // Scroll to element after highlighting
+            setTimeout(() => {
+                this.scrollToElement(bestMatch);
+            }, 100);
+            this.showLocationToast(`🔍 Found similar content (${(bestScore * 100).toFixed(1)}% similarity)`);
+            return true;
+        }
+        
+        return false;
+    }
+
+    highlightExactMatch(element, searchText, startIndex) {
+        const elementText = element.textContent;
+        const actualMatch = elementText.substring(startIndex, startIndex + searchText.length);
+        
+        // Create a more precise highlight by finding the text node and splitting it
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let currentOffset = 0;
+        let targetNode = null;
+        let targetNodeOffset = 0;
+        
+        let node;
+        while (node = walker.nextNode()) {
+            const nodeLength = node.textContent.length;
+            
+            if (currentOffset + nodeLength > startIndex) {
+                targetNode = node;
+                targetNodeOffset = startIndex - currentOffset;
+                break;
+            }
+            
+            currentOffset += nodeLength;
+        }
+        
+        if (targetNode) {
+            // Split the text node and wrap the match
+            const range = document.createRange();
+            range.setStart(targetNode, targetNodeOffset);
+            range.setEnd(targetNode, Math.min(targetNodeOffset + searchText.length, targetNode.textContent.length));
+            
+            if (!range.collapsed) {
+                try {
+                    const span = document.createElement('span');
+                    span.className = 'word-munch-location-highlight';
+                                         span.style.cssText = `
+                        background: rgba(255, 235, 59, 0.7) !important;
+                        color: #333 !important;
+                        padding: 2px 4px !important;
+                        border-radius: 3px !important;
+                        border: 1px solid rgba(255, 193, 7, 0.8) !important;
+                        animation: word-munch-highlight-fade 1s ease-in-out !important;
+                        position: relative !important;
+                        z-index: 999 !important;
+                    `;
+                    
+                    range.surroundContents(span);
+                    this.addHighlightAnimation();
+                } catch (error) {
+                    console.warn('Could not create precise highlight, falling back to element highlight');
+                    this.highlightElement(element);
+                }
+            }
+        } else {
+            // Fallback to element highlighting
+            this.highlightElement(element);
+        }
+    }
+
+    getMainTextElements() {
+        // More selective element targeting
+        const selectors = [
+            'p', 'article', 'section', 'main',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'li', 'blockquote', 'div[class*="content"]',
+            'div[class*="text"]', 'div[class*="body"]'
+        ];
+        
+        const elements = [];
+        
+        selectors.forEach(selector => {
+            const found = document.querySelectorAll(selector);
+            found.forEach(el => {
+                // Skip our extension elements
+                if (el.id && el.id.includes('word-munch')) return;
+                if (el.className && el.className.includes && el.className.includes('word-munch')) return;
+                
+                // Skip navigation, ads, etc.
+                if (el.closest('nav, header, footer, aside, .nav, .menu, .ads, .advertisement')) return;
+                
+                // Only include elements with substantial text
+                const text = el.textContent.trim();
+                if (text.length > 30 && text.split(/\s+/).length > 5) {
+                    elements.push(el);
+                }
+            });
+        });
+        
+        // Sort by text length (longer first, as they're more likely to contain our target)
+        return elements.sort((a, b) => b.textContent.length - a.textContent.length);
+    }
+
+    findAndHighlightFuzzyText(words, requiredMatches) {
+        const textElements = this.getMainTextElements();
+        
+        // Only use significant words for fuzzy matching
+        const significantWords = words.filter(w => w.length > 4);
+        const adjustedRequired = Math.max(1, Math.ceil(significantWords.length * 0.4));
+        
+        for (const element of textElements) {
+            const text = element.textContent.toLowerCase();
+            let matchCount = 0;
+            const matchedWords = [];
+            
+            for (const word of significantWords) {
+                if (text.includes(word.toLowerCase())) {
+                    matchCount++;
+                    matchedWords.push(word);
+                }
+            }
+            
+            if (matchCount >= adjustedRequired) {
+                // Try to highlight only the relevant sentences within the element
+                this.highlightRelevantSentences(element, matchedWords);
+                // Scroll to element after highlighting
+                setTimeout(() => {
+                    this.scrollToElement(element);
+                }, 100);
+                this.showLocationToast(`🔑 Found content with ${matchCount}/${significantWords.length} key terms`);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    highlightRelevantSentences(element, matchedWords) {
+        const text = element.textContent;
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
+        
+        let bestSentence = null;
+        let bestScore = 0;
+        
+        // Find the sentence with the most keyword matches
+        sentences.forEach(sentence => {
+            const lowerSentence = sentence.toLowerCase();
+            let score = 0;
+            matchedWords.forEach(word => {
+                if (lowerSentence.includes(word.toLowerCase())) {
+                    score++;
+                }
+            });
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestSentence = sentence.trim();
+            }
+        });
+        
+        if (bestSentence && bestScore > 0) {
+            // Find and highlight the best sentence within the element
+            const sentenceIndex = text.indexOf(bestSentence);
+            if (sentenceIndex !== -1) {
+                this.highlightExactMatch(element, bestSentence, sentenceIndex);
+                return;
+            }
+        }
+        
+        // Fallback to element highlighting
+        this.highlightElement(element);
+    }
+
+    addHighlightAnimation() {
+        // Add simple animation keyframes if not exists
+        if (!document.getElementById('word-munch-location-styles')) {
+            const style = document.createElement('style');
+            style.id = 'word-munch-location-styles';
+            style.textContent = `
+                @keyframes word-munch-highlight-fade {
+                    0% { 
+                        background: rgba(255, 235, 59, 0.9);
+                    }
+                    100% { 
+                        background: rgba(255, 235, 59, 0.6);
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+
+    findMostSimilarTextBlock(targetText) {
+        const textElements = this.getAllTextElements();
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        for (const element of textElements) {
+            const elementText = element.textContent.replace(/\s+/g, ' ').trim();
+            if (elementText.length < 50) continue; // Skip very short text
+            
+            const score = this.calculateTextSimilarity(elementText, targetText);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = element;
+            }
+        }
+        
+        if (bestMatch && bestScore > 0.3) {
+            this.highlightElement(bestMatch);
+            this.scrollToElement(bestMatch);
+            this.showLocationToast(`Found most similar content (${(bestScore * 100).toFixed(1)}% similarity)`);
+            return true;
+        }
+        
+        this.showLocationToast('❌ Could not locate this content in the current page', 'warning');
+        return false;
+    }
+
+
+
+    calculateTextSimilarity(text1, text2) {
+        // Improved similarity calculation
+        const words1 = text1.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        const words2 = text2.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        
+        if (words1.length === 0 || words2.length === 0) return 0;
+        
+        const set1 = new Set(words1);
+        const set2 = new Set(words2);
+        
+        const intersection = new Set([...set1].filter(x => set2.has(x)));
+        
+        // Use Jaccard similarity but with length consideration
+        const jaccard = intersection.size / (set1.size + set2.size - intersection.size);
+        
+        // Bonus for length similarity
+        const lengthSimilarity = 1 - Math.abs(text1.length - text2.length) / Math.max(text1.length, text2.length);
+        
+        // Combined score
+        return jaccard * 0.8 + lengthSimilarity * 0.2;
+    }
+
+
+
+    highlightElement(element) {
+        element.classList.add('word-munch-location-highlight');
+        element.style.cssText += `
+            background: rgba(255, 235, 59, 0.6) !important;
+            color: #333 !important;
+            padding: 4px 6px !important;
+            border-radius: 4px !important;
+            border: 2px solid rgba(255, 193, 7, 0.8) !important;
+            animation: word-munch-highlight-fade 1s ease-in-out !important;
+            position: relative !important;
+            z-index: 999 !important;
+        `;
+        
+        this.addHighlightAnimation();
+    }
+
+    scrollToFirstHighlight() {
+        const highlight = document.querySelector('.word-munch-location-highlight');
+        if (highlight) {
+            this.scrollToElement(highlight);
+        }
+    }
+
+    scrollToElement(element) {
+        // Ensure element is visible and centered in viewport
+        const rect = element.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const elementHeight = rect.height;
+        
+        // Calculate optimal scroll position to center the element
+        const optimalTop = rect.top + window.scrollY - (viewportHeight / 2) + (elementHeight / 2);
+        
+        // Scroll to the calculated position
+        window.scrollTo({
+            top: Math.max(0, optimalTop),
+            behavior: 'smooth'
+        });
+        
+        console.log('🎯 Scrolled to highlighted content');
+    }
+
+    clearLocationHighlights() {
+        // Remove all existing highlights
+        const highlights = document.querySelectorAll('.word-munch-location-highlight');
+        highlights.forEach(highlight => {
+            if (highlight.tagName.toLowerCase() === 'span') {
+                // For text node highlights, unwrap the content
+                const parent = highlight.parentElement;
+                if (parent) {
+                    while (highlight.firstChild) {
+                        parent.insertBefore(highlight.firstChild, highlight);
+                    }
+                    parent.removeChild(highlight);
+                }
+            } else {
+                // For element highlights, just remove the class and styles
+                highlight.classList.remove('word-munch-location-highlight');
+                // Reset styles (remove inline styles added by highlighting)
+                const stylesToRemove = [
+                    'background', 'color', 'padding', 'border-radius', 
+                    'box-shadow', 'animation', 'position', 'z-index'
+                ];
+                stylesToRemove.forEach(style => {
+                    highlight.style.removeProperty(style);
+                });
+            }
+        });
+    }
+
+    showLocationToast(message, type = 'success') {
+        // Create toast notification
+        const toast = document.createElement('div');
+        toast.className = 'word-munch-location-toast';
+        toast.innerHTML = `
+            <div class="toast-content">
+                <span class="toast-icon">${type === 'success' ? '🎯' : '⚠️'}</span>
+                <span class="toast-message">${message}</span>
+            </div>
+        `;
+        
+        toast.style.cssText = `
+            position: fixed !important;
+            top: 80px !important;
+            right: 20px !important;
+            background: ${type === 'success' ? '#10b981' : '#f59e0b'} !important;
+            color: white !important;
+            padding: 12px 16px !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+            z-index: 10003 !important;
+            font-family: system-ui, -apple-system, sans-serif !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            opacity: 0 !important;
+            transform: translateX(100%) !important;
+            transition: all 0.3s ease !important;
+            max-width: 350px !important;
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Animate in
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        }, 100);
+        
+        // Auto remove
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.parentElement.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Cleanup method
+    destroy() {
+        if (this.button) {
+            this.button.remove();
+        }
+        if (this.panel) {
+            this.panel.remove();
+        }
+    }
+}
+
+// === Initialize Standalone Semantic Search ===
+let standaloneSemanticSearch = null;
+
+// Initialize after content is loaded
+function initializeStandaloneSearch() {
+    // Only initialize on regular web pages (not extension pages)
+    if (!window.location.href.includes('chrome-extension://') && 
+        !window.location.href.includes('moz-extension://')) {
+        standaloneSemanticSearch = new StandaloneSemanticSearch();
+        console.log('🔍 Standalone Semantic Search initialized');
+    }
+}
