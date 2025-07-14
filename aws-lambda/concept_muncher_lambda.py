@@ -1158,7 +1158,12 @@ def lambda_handler(event, context):
             user_id = extract_user_id_from_event(event)
             is_anonymous = is_anonymous_user(event)
             
+            logger.info(f"Skeleton request - User ID: {user_id}, Is Anonymous: {is_anonymous}")
+            logger.info(f"Headers: {list(event.get('headers', {}).keys())}")
+            
+            # Only apply rate limiting for anonymous users
             if is_anonymous:
+                logger.info(f"Applying skeleton rate limiting for anonymous user: {user_id}")
                 skeleton_rate_limit_result = check_anonymous_skeleton_rate_limit(user_id)
                 if not skeleton_rate_limit_result['allowed']:
                     # Send metrics for skeleton rate limit hit
@@ -1180,15 +1185,20 @@ def lambda_handler(event, context):
                             'user_friendly_message': f'You\'ve reached your daily limit of {skeleton_rate_limit_result["daily_limit"]} sentence simplifications. Please try again tomorrow!'
                         })
                     }
+            else:
+                logger.info(f"Authenticated user detected, skipping skeleton rate limiting for user: {user_id}")
             
             try:
                 # Initialize analyzer for skeleton extraction only
                 analyzer = TextComprehensionAnalyzer()
                 skeleton_result = analyzer.extract_sentence_skeleton(original_text)
                 
-                # Record skeleton usage for anonymous users
+                # Record skeleton usage for anonymous users only
                 if is_anonymous:
                     record_anonymous_skeleton_usage(user_id)
+                    logger.info(f"Recorded skeleton usage for anonymous user: {user_id}")
+                else:
+                    logger.info(f"Skeleton extraction completed for authenticated user: {user_id} (no usage recording needed)")
                 
                 return {
                     'statusCode': 200,
@@ -1386,10 +1396,13 @@ def lambda_handler(event, context):
 def extract_user_id_from_event(event):
     """Extract user ID from event"""
     headers = event.get('headers', {})
-    auth_header = headers.get('Authorization', '')
+    
+    # Handle both uppercase and lowercase Authorization headers (API Gateway sometimes converts to lowercase)
+    auth_header = headers.get('Authorization', '') or headers.get('authorization', '')
     
     # For registered users, use JWT token
-    if auth_header.startswith('Bearer '):
+    if auth_header.startswith('Bearer ') or auth_header.startswith('bearer '):
+        logger.info(f"Extracting user ID from Bearer token")
         return 'user_' + hashlib.md5(auth_header.encode()).hexdigest()[:8]
     
     # For anonymous users, try to get client-generated anonymous ID from request body
@@ -1424,10 +1437,13 @@ def extract_user_id_from_event(event):
 def is_anonymous_user(event):
     """Check if the user is anonymous (no Authorization header)"""
     headers = event.get('headers', {})
-    auth_header = headers.get('Authorization', '')
+    
+    # Handle both uppercase and lowercase Authorization headers (API Gateway sometimes converts to lowercase)
+    auth_header = headers.get('Authorization', '') or headers.get('authorization', '')
     
     # Primary check: no Bearer token
-    if auth_header.startswith('Bearer '):
+    if auth_header.startswith('Bearer ') or auth_header.startswith('bearer '):
+        logger.info(f"Found Bearer token, user is authenticated")
         return False
     
     # Secondary check: if anonymous_user_id is provided in request body
@@ -1439,11 +1455,13 @@ def is_anonymous_user(event):
         
         anonymous_id = body.get('anonymous_user_id')
         if anonymous_id and isinstance(anonymous_id, str):
+            logger.info(f"Found anonymous_user_id, user is anonymous")
             return True  # Has anonymous ID, definitely anonymous
             
     except (json.JSONDecodeError, TypeError, AttributeError):
         pass
     
+    logger.info(f"No Bearer token found, treating as anonymous user")
     return True  # Default to anonymous if no Bearer token
 
 def check_anonymous_user_rate_limit(user_id):

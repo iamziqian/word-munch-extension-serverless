@@ -1383,12 +1383,23 @@ class APIManager {
                 skeleton_only: true
             };
             
+            const headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+
+            // Add authentication token if available
+            const authToken = await UserManager.getAuthToken();
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+                console.log('Service Worker: Skeleton API auth token added');
+            } else {
+                console.log('Service Worker: No auth token available for skeleton API');
+            }
+            
             const response = await fetch(CONFIG.CONCEPT_API_ENDPOINT, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
+                headers: headers,
                 body: JSON.stringify(requestData)
             });
             
