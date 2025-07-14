@@ -1134,9 +1134,36 @@
         max-height: 85vh !important;
     }
     
-    .concept-scrollable-content {
-        max-height: calc(85vh - 100px) !important; /* Account for header and action bar */
-    }
+         .concept-scrollable-content {
+         max-height: calc(85vh - 100px) !important; /* Account for header and action bar */
+     }
+     
+     /* Mobile responsive for concept header buttons */
+     .concept-header-minimal {
+         font-size: 12px !important;
+         padding: 8px 12px !important;
+     }
+     
+     .concept-text-preview {
+         font-size: 10px !important;
+         max-width: 80px !important;
+     }
+     
+     .concept-word-count {
+         font-size: 9px !important;
+         padding: 1px 4px !important;
+     }
+     
+     .concept-copy-btn {
+         width: 24px !important;
+         height: 20px !important;
+     }
+     
+     .concept-copy-btn::before,
+     .concept-copy-btn::after {
+         width: 6px !important;
+         height: 6px !important;
+     }
     
     .concept-stats {
         gap: var(--wm-spacing-sm);
@@ -2662,4 +2689,90 @@
 .concept-skeleton-section:last-child,
 .concept-understanding-section:last-child {
     border-bottom: none;
+}
+
+/* Header buttons container */
+.concept-header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* Copy button in concept header */
+.concept-copy-btn {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: white;
+    cursor: pointer;
+    width: 28px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: var(--wm-transition-fast);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.concept-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
+}
+
+.concept-copy-btn.success {
+    background: rgba(34, 197, 94, 0.8);
+    color: white;
+}
+
+.concept-copy-btn.success:hover {
+    background: rgba(34, 197, 94, 0.9);
+}
+
+/* Copy icon for concept header (same as word muncher) */
+.concept-copy-btn::before {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    transform: translate(-2px, -2px);
+}
+
+.concept-copy-btn::after {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    transform: translate(2px, 2px);
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.concept-copy-btn:hover::after {
+    background: rgba(255, 255, 255, 1);
+}
+
+.concept-copy-btn.success::before,
+.concept-copy-btn.success::after {
+    display: none;
+}
+
+.concept-copy-btn.success::before {
+    content: "✓";
+    display: flex;
+    position: static;
+    transform: none;
+    width: auto;
+    height: auto;
+    border: none;
+    border-radius: 0;
+    font-size: 14px;
+    background: transparent;
+    align-items: center;
+    justify-content: center;
+    color: white;
 }

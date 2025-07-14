@@ -1138,6 +1138,16 @@ class WidgetManager {
         
         const understandingInput = widget.querySelector('.concept-input-minimal');
         const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
+        const copyBtn = widget.querySelector('.concept-copy-btn');
+        
+        // Setup copy button functionality
+        if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                this.copySelectedTextToClipboard(text, copyBtn);
+            });
+        }
         
         if (understandingInput && analyzeBtn) {
             understandingInput.addEventListener('input', () => {
@@ -1633,6 +1643,89 @@ class WidgetManager {
         }
     }
     
+    // Copy selected text to clipboard (for concept muncher)
+    static copySelectedTextToClipboard(text, copyBtn) {
+        if (!text) {
+            console.log('Word Munch: No text to copy');
+            return;
+        }
+        
+        navigator.clipboard.writeText(text).then(() => {
+            console.log('Word Munch: Copied selected text to clipboard:', text.substring(0, 50) + '...');
+            
+            // Show success feedback
+            if (copyBtn) {
+                copyBtn.classList.add('success');
+                
+                setTimeout(() => {
+                    copyBtn.classList.remove('success');
+                }, 1500);
+            }
+            
+            // Show toast notification
+            this.showCopySuccessToast();
+            
+        }).catch(err => {
+            console.error('Word Munch: Failed to copy selected text:', err);
+            
+            // Show error feedback
+            if (copyBtn) {
+                copyBtn.style.opacity = '0.5';
+                setTimeout(() => {
+                    copyBtn.style.opacity = '1';
+                }, 1000);
+            }
+        });
+    }
+    
+    // Show copy success toast
+    static showCopySuccessToast() {
+        // Check if toast already exists to avoid duplicates
+        const existingToast = document.querySelector('.concept-copy-toast');
+        if (existingToast) {
+            existingToast.remove();
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = 'concept-copy-toast';
+        toast.textContent = 'Text copied to clipboard!';
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #059669;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: var(--wm-font-family);
+            z-index: 10003;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Trigger animation
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
+    }
+    
     // Update synonym display for independent widget
     static updateSynonymDisplayForWidget(widget, result, index) {
         const synonymEl = widget.querySelector('.wm-synonym');
@@ -1862,7 +1955,10 @@ class ContentTemplates {
                     <span class="concept-title">Understanding</span>
                     <span class="concept-text-preview">"${this.escapeHtml(text.substring(0, 30))}${text.length > 30 ? '...' : ''}"</span>
                     <span class="concept-word-count">(${text.split(' ').length} words)</span>
-                    <button class="wm-close-btn">×</button>
+                    <div class="concept-header-buttons">
+                        <button class="concept-copy-btn" title="Copy selected text"></button>
+                        <button class="wm-close-btn">×</button>
+                    </div>
                 </div>
                 
                 <!-- Scrollable content area -->
