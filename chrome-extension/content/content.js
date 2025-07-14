@@ -1338,35 +1338,19 @@ class WidgetManager {
                     if (loadingEl) loadingEl.style.display = 'none';
                     if (errorEl) {
                         errorEl.innerHTML = `
-                            <div style="margin-bottom: 8px;">Request timeout</div>
-                            <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
-                                Retry
-                            </button>
+                            <div class="skeleton-error">
+                                <span class="skeleton-error-icon">⏰</span>
+                                <span class="skeleton-error-text">Request timeout</span>
+                                <div class="skeleton-error-actions">
+                                    <button class="skeleton-retry-btn" onclick="window.location.reload()">
+                                        ↻ Retry
+                                    </button>
+                                </div>
+                            </div>
                         `;
                         errorEl.classList.add('show');
                         
-                        const retryBtn = errorEl.querySelector('.wm-retry-btn');
-                        if (retryBtn) {
-                            retryBtn.addEventListener('click', () => {
-                                // Restart simplified
-                                errorEl.classList.remove('show');
-                                loadingEl.style.display = 'flex';
-                                
-                                const newRequestId = Math.random().toString(36).substr(2, 9);
-                                independentWidget.setAttribute('data-request-id', newRequestId);
-                                
-                                this.sendIndependentWidgetRequest(independentWidget, {
-                                    type: 'WORD_SELECTED',
-                                    word: selectedText,
-                                    text: selectedText,
-                                    context: context,
-                                    url: window.location.href,
-                                    title: document.title,
-                                    requestId: newRequestId,
-                                    isIndependent: true
-                                });
-                            });
-                        }
+                        // No need for additional event binding as onclick is used in HTML
                     }
                 }
             }
@@ -1400,28 +1384,19 @@ class WidgetManager {
                             }
                             
                             errorEl.innerHTML = `
-                                <div style="margin-bottom: 8px;">${errorMessage}</div>
-                                <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
-                                    Retry
-                                </button>
+                                <div class="skeleton-error">
+                                    <span class="skeleton-error-icon">❌</span>
+                                    <span class="skeleton-error-text">${errorMessage}</span>
+                                    <div class="skeleton-error-actions">
+                                        <button class="skeleton-retry-btn" onclick="window.location.reload()">
+                                            ↻ Retry
+                                        </button>
+                                    </div>
+                                </div>
                             `;
                             errorEl.classList.add('show');
                             
-                            // 绑定重试按钮
-                            const retryBtn = errorEl.querySelector('.wm-retry-btn');
-                            if (retryBtn) {
-                                retryBtn.addEventListener('click', () => {
-                                    errorEl.classList.remove('show');
-                                    if (loadingEl) loadingEl.style.display = 'flex';
-                                    
-                                    // 重新发送请求
-                                    const newRequestId = Math.random().toString(36).substr(2, 9);
-                                    widget.setAttribute('data-request-id', newRequestId);
-                                    message.requestId = newRequestId;
-                                    
-                                    this.sendIndependentWidgetRequest(widget, message);
-                                });
-                            }
+                            // No need for additional event binding as onclick is used in HTML
                         }
                     }
                     return;
@@ -1708,27 +1683,77 @@ class WidgetManager {
         if (error) {
             console.error('Word Munch: Independent widget error:', error);
             
+            // Parse detailed error information - same logic as main widget
+            let userFriendlyError = 'Word simplification failed';
+            let errorIcon = '⚠️';
+            let errorType = 'general';
+            
+            // Try to parse structured error response
+            try {
+                if (error && typeof error === 'string') {
+                    // Look for JSON in error message (handle "API request failed 429: {json}" format)
+                    const jsonMatch = error.match(/\{.*\}/);
+                    if (jsonMatch) {
+                        const errorData = JSON.parse(jsonMatch[0]);
+                        console.log('Parsed independent widget error data:', errorData);
+                        
+                        // Handle rate limit errors specifically
+                        if (errorData.error_code === 'RATE_LIMIT_EXCEEDED') {
+                            userFriendlyError = errorData.message || 
+                                `You've reached your daily limit of ${errorData.limit} word simplifications. Please try again tomorrow!`;
+                            errorIcon = '🚫';
+                            errorType = 'rate-limit';
+                        } else if (errorData.message) {
+                            userFriendlyError = errorData.message;
+                        } else if (errorData.error) {
+                            userFriendlyError = errorData.error;
+                        } else if (errorData.user_friendly_message) {
+                            userFriendlyError = errorData.user_friendly_message;
+                        }
+                    }
+                }
+            } catch (parseError) {
+                console.log('Could not parse independent widget error JSON:', parseError);
+                console.log('Original error:', error);
+            }
+            
+            // Fallback error message handling
+            if (userFriendlyError === 'Word simplification failed') {
+                if (error && error.includes && (error.includes('429') || error.includes('RATE_LIMIT_EXCEEDED') || error.includes('Daily usage limit exceeded'))) {
+                    userFriendlyError = 'You\'ve reached your daily word simplification limit. Please try again tomorrow!';
+                    errorIcon = '🚫';
+                    errorType = 'rate-limit';
+                } else if (error && error.includes && error.includes('403')) {
+                    userFriendlyError = 'Authentication issue - please refresh the page';
+                } else if (error && error.includes && error.includes('timeout')) {
+                    userFriendlyError = 'Request timeout - please try again';
+                } else if (error && error.includes && error.includes('Connection failed')) {
+                    userFriendlyError = 'Connection failed - please check your internet';
+                } else if (error && error.includes && error.includes('Extension needs refresh')) {
+                    userFriendlyError = 'Extension needs refresh - please refresh the page';
+                    errorIcon = '⏰';
+                } else if (error && typeof error === 'string') {
+                    userFriendlyError = error;
+                }
+            }
+            
             if (loadingEl) loadingEl.style.display = 'none';
             if (resultEl) resultEl.classList.remove('show');
             if (errorEl) {
                 errorEl.innerHTML = `
-                    <div style="margin-bottom: 8px;">${error}</div>
-                    <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
-                        Retry
-                    </button>
+                    <div class="skeleton-error" data-error-type="${errorType}">
+                        <span class="skeleton-error-icon">${errorIcon}</span>
+                        <span class="skeleton-error-text">${userFriendlyError}</span>
+                        <div class="skeleton-error-actions">
+                            <button class="skeleton-retry-btn" onclick="window.location.reload()">
+                                ↻ Retry
+                            </button>
+                        </div>
+                    </div>
                 `;
                 errorEl.classList.add('show');
                 
-                // Bind retry button event
-                const retryBtn = errorEl.querySelector('.wm-retry-btn');
-                if (retryBtn) {
-                    retryBtn.addEventListener('click', () => {
-                        errorEl.classList.remove('show');
-                        loadingEl.style.display = 'flex';
-                        
-                        // Trigger the logic for re-requesting in createIndependentWordWindow
-                    });
-                }
+                // No need for additional event binding as onclick is used in HTML
             }
         } else if (result && result.synonyms && result.synonyms.length > 0) {
             console.log('Word Munch: Independent widget received result:', result);
@@ -2257,38 +2282,78 @@ class ResultDisplayer {
         if (errorEl) {
             errorEl.classList.add('show');
             
-            errorEl.innerHTML = `
-                <div style="margin-bottom: 8px;">${error || 'Simplification failed'}</div>
-                <button class="wm-btn wm-btn-primary wm-retry-btn" style="width: auto; padding: 6px 12px; font-size: 12px;">
-                    Retry
-                </button>
-            `;
+            // Parse detailed error information - same logic as skeleton error
+            let userFriendlyError = 'Word simplification failed';
+            let errorIcon = '⚠️';
+            let errorType = 'general';
             
-            const retryBtn = errorEl.querySelector('.wm-retry-btn');
-            if (retryBtn) {
-                retryBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.retrySimplification();
-                });
+            // Try to parse structured error response
+            try {
+                if (error && typeof error === 'string') {
+                    // Look for JSON in error message (handle "API request failed 429: {json}" format)
+                    const jsonMatch = error.match(/\{.*\}/);
+                    if (jsonMatch) {
+                        const errorData = JSON.parse(jsonMatch[0]);
+                        console.log('Parsed word muncher error data:', errorData);
+                        
+                        // Handle rate limit errors specifically
+                        if (errorData.error_code === 'RATE_LIMIT_EXCEEDED') {
+                            userFriendlyError = errorData.message || 
+                                `You've reached your daily limit of ${errorData.limit} word simplifications. Please try again tomorrow!`;
+                            errorIcon = '🚫';
+                            errorType = 'rate-limit';
+                        } else if (errorData.message) {
+                            userFriendlyError = errorData.message;
+                        } else if (errorData.error) {
+                            userFriendlyError = errorData.error;
+                        } else if (errorData.user_friendly_message) {
+                            userFriendlyError = errorData.user_friendly_message;
+                        }
+                    }
+                }
+            } catch (parseError) {
+                console.log('Could not parse word muncher error JSON:', parseError);
+                console.log('Original error:', error);
             }
+            
+            // Fallback error message handling
+            if (userFriendlyError === 'Word simplification failed') {
+                if (error && error.includes && (error.includes('429') || error.includes('RATE_LIMIT_EXCEEDED') || error.includes('Daily usage limit exceeded'))) {
+                    userFriendlyError = 'You\'ve reached your daily word simplification limit. Please try again tomorrow!';
+                    errorIcon = '🚫';
+                    errorType = 'rate-limit';
+                } else if (error && error.includes && error.includes('403')) {
+                    userFriendlyError = 'Authentication issue - please refresh the page';
+                } else if (error && error.includes && error.includes('timeout')) {
+                    userFriendlyError = 'Request timeout - please try again';
+                } else if (error && error.includes && error.includes('Connection failed')) {
+                    userFriendlyError = 'Connection failed - please check your internet';
+                } else if (error && error.includes && error.includes('Extension needs refresh')) {
+                    userFriendlyError = 'Extension needs refresh - please refresh the page';
+                    errorIcon = '↻';
+                } else if (error && typeof error === 'string') {
+                    userFriendlyError = error;
+                }
+            }
+            
+            // Use skeleton error structure and styling
+            errorEl.innerHTML = `
+                <div class="skeleton-error" data-error-type="${errorType}">
+                    <span class="skeleton-error-icon">${errorIcon}</span>
+                    <span class="skeleton-error-text">${userFriendlyError}</span>
+                    <div class="skeleton-error-actions">
+                        <button class="skeleton-retry-btn" onclick="window.location.reload()">
+                            ↻ Retry
+                        </button>
+                    </div>
+                </div>
+            `;
         }
     }
 
     static retrySimplification() {
-        if (!state.currentSelection) return;
-        
-        console.log('Word Munch: Retry simplification:', state.currentSelection.text);
-        
-        const errorEl = state.floatingWidget?.querySelector('.wm-error');
-        const loadingEl = state.floatingWidget?.querySelector('.wm-loading');
-        
-        if (errorEl) errorEl.classList.remove('show');
-        if (loadingEl) loadingEl.style.display = 'flex';
-        
-        const text = state.currentSelection.text;
-        const type = TextValidator.isValidWord(text) ? 'word' : 'sentence';
-        
-        APIManager.startSimplification(text, type);
+        console.log('Word Munch: Retry simplification - refreshing page');
+        window.location.reload();
     }
 
     static showSimpleToast(message, type = 'success') {
