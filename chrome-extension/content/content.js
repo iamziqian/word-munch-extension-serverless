@@ -2482,20 +2482,20 @@ class ConceptAnalyzer {
                 // Special case: rate limiting - show red retry button but refresh page
                 actionButtons += `
                     <button class="skeleton-retry-btn" onclick="window.location.reload()">
-                        🔄 Retry
+                        ↻ Retry
                     </button>
                 `;
             } else if (showRetry === true) {
                 actionButtons += `
                     <button class="skeleton-retry-btn" onclick="window.retrySkeletonExtraction()">
-                        🔄 Retry
+                        ↻ Retry
                     </button>
                 `;
             }
             if (showRefresh) {
                 actionButtons += `
                     <button class="skeleton-refresh-btn" onclick="window.location.reload()">
-                        🔃 Refresh Page
+                        ↻ Refresh Page
                     </button>
                 `;
             }
