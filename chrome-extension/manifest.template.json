@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Word Munch",
-  "version": "1.1.0",
-  "description": "A browser extension that simplifies reading comprehension in one place",
+  "name": "Smart Reading Assistant - Word Munch",
+  "version": "1.1.1",
+  "description": "AI handles the mechanical reading tasks, you focus on understanding and thinking.",
   "permissions": [
     "activeTab",
     "storage",
