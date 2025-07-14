@@ -620,6 +620,16 @@ class EventManager {
                     console.log('Word Munch: Received semantic search error:', message.error);
                     semanticSearchManager.handleSearchError(message.error, message.requestId);
                     break;
+
+                case 'SKELETON_EXTRACTION_RESULT':
+                    console.log('Word Munch: Received skeleton extraction result');
+                    ConceptAnalyzer.handleSkeletonResult(message.data);
+                    break;
+
+                case 'SKELETON_EXTRACTION_ERROR':
+                    console.log('Word Munch: Received skeleton extraction error:', message.error);
+                    ConceptAnalyzer.handleSkeletonError(message.error);
+                    break;
                     
                 default:
                     console.log('Word Munch: Unknown message type:', message.type);
@@ -679,7 +689,7 @@ class EventManager {
             if (clickedElement.tagName === 'INPUT' || 
                 clickedElement.tagName === 'TEXTAREA' ||
                 clickedElement.contentEditable === 'true' ||
-                clickedElement.closest('.concept-understanding-input-minimal') ||
+                clickedElement.closest('.concept-input-minimal') ||
                 clickedElement.closest('.concept-content-minimal')) {
                 console.log('Word Munch: Click in input area, do not close concept analysis window');
                 return;
@@ -859,7 +869,12 @@ class WidgetManager {
         document.body.appendChild(state.floatingWidget);
         console.log('Word Munch: New floating widget added to DOM');
         
-        DragHandler.makeDraggable(state.floatingWidget);
+        // For the new concept muncher design, we need to make the whole container draggable
+        if (isConceptAnalysis) {
+            DragHandler.makeDraggable(state.floatingWidget, '.concept-header-minimal');
+        } else {
+            DragHandler.makeDraggable(state.floatingWidget);
+        }
         
         // 显示动画
         setTimeout(() => {
@@ -1121,7 +1136,7 @@ class WidgetManager {
     static setupConceptMuncherEvents(text) {
         const widget = state.floatingWidget;
         
-        const understandingInput = widget.querySelector('.concept-understanding-input-minimal');
+        const understandingInput = widget.querySelector('.concept-input-minimal');
         const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
         
         if (understandingInput && analyzeBtn) {
@@ -1814,25 +1829,40 @@ class ContentTemplates {
 
 
     static createConceptMuncherContent(text) {
-        const displayText = text.length > 50 ? text.substring(0, 50) + '...' : text;
-        const wordCount = text.split(/\s+/).length;
-        
         return `
-            <div class="wm-header concept-header">
-                <div class="wm-header-text drag-handle">
-                    🧠 Understanding (${wordCount} words)
+            <div class="concept-muncher-container-minimal">
+                <!-- Header with text preview -->
+                <div class="concept-header-minimal">
+                    <span class="concept-icon">🧠</span>
+                    <span class="concept-title">Understanding</span>
+                    <span class="concept-text-preview">"${this.escapeHtml(text.substring(0, 30))}${text.length > 30 ? '...' : ''}"</span>
+                    <span class="concept-word-count">(${text.split(' ').length} words)</span>
+                    <button class="wm-close-btn">×</button>
                 </div>
-                <button class="wm-close-btn">×</button>
-            </div>
-            
-            <div class="wm-content concept-content-minimal">
-                <!-- Input section -->
-                <div class="concept-input-minimal">
-                    <textarea 
-                        class="concept-understanding-input-minimal" 
-                        placeholder="Your understanding in one sentence..."
-                        rows="2"
-                    ></textarea>
+                
+                <!-- Skeleton extraction section (auto-displayed) -->
+                <div class="concept-skeleton-section">
+                    <div class="concept-section-label">🔍 Sentence Skeleton</div>
+                    <div class="concept-skeleton-loading">
+                        <div class="wm-spinner-small"></div>
+                        <span>Extracting skeleton...</span>
+                    </div>
+                    <div class="concept-skeleton-results" style="display: none;">
+                        <!-- Skeleton results will be populated here -->
+                    </div>
+                </div>
+                
+                <!-- User understanding input -->
+                <div class="concept-understanding-section">
+                    <div class="concept-section-label">✍️ Your Understanding</div>
+                    <div class="concept-input-container">
+                        <textarea 
+                            class="concept-input-minimal" 
+                            placeholder="Looking at the sentence skeleton above, explain your understanding of the main idea..."
+                            rows="3"
+                        ></textarea>
+                        <div class="input-helper-text">💡 Use the skeleton structure to guide your response</div>
+                    </div>
                 </div>
                 
                 <!-- Action section -->
@@ -1840,17 +1870,16 @@ class ContentTemplates {
                     <button class="wm-btn wm-btn-primary concept-analyze-btn-minimal" disabled>
                         Analyze Understanding
                     </button>
-                    <!-- Make cost display more subtle -->
-                    <div class="concept-cost-minimal-improved">~$0.0002</div>
+                    <div class="concept-cost-minimal-improved">~$0.00003</div>
                 </div>
                 
                 <!-- Loading state -->
                 <div class="concept-loading-minimal" style="display: none;">
                     <div class="wm-spinner"></div>
-                    <span>Analyzing...</span>
+                    <span>Analyzing comprehension...</span>
                 </div>
                 
-                <!-- Results - Minimal display -->
+                <!-- Results display -->
                 <div class="concept-results-minimal" style="display: none;">
                     <!-- Results will be populated here -->
                 </div>
@@ -1872,8 +1901,10 @@ class ContentTemplates {
 
 // === Drag handler ===
 class DragHandler {
-    static makeDraggable(element) {
-        const dragHandle = element.querySelector('.drag-handle') || element.querySelector('.wm-header');
+    static makeDraggable(element, customSelector = null) {
+        const dragHandle = customSelector ? 
+            element.querySelector(customSelector) : 
+            element.querySelector('.drag-handle') || element.querySelector('.wm-header');
         
         if (!dragHandle) return;
         
@@ -2305,32 +2336,132 @@ class ConceptAnalyzer {
         }
         
         try {
-            console.log('Word Munch: Start filling context information');
+            console.log('Word Munch: Start filling context information and auto-extracting skeleton');
             
-            // Simple cost estimation
+            // 简化prompt后的成本估算 - Nova Micro + 更少tokens
             const wordCount = selectedText.split(/\s+/).length;
-            const estimatedCost = Math.max(0.0002, wordCount * 0.00003);
+            const estimatedCost = Math.max(0.00003, wordCount * 0.000005);
             
-            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal');
+            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal-improved');
             if (costElement) {
-                // Make cost display more subtle
-                costElement.textContent = `~$${estimatedCost.toFixed(4)}`;
-                costElement.style.fontSize = '11px';
-                costElement.style.opacity = '0.6';
-                costElement.style.color = '#6b7280'; // Use gray for cost display
+                costElement.textContent = `~$${estimatedCost.toFixed(5)}`;
             }
             
             // Store simplified context strategy
             state.currentSelection.contextStrategy = { type: 'user_only' };
             state.currentSelection.costEstimate = { estimatedCost };
             
+            // Auto-start skeleton extraction
+            this.autoExtractSkeleton(selectedText);
+            
         } catch (error) {
             console.error('Word Munch: Failed to fill context information:', error);
-            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal');
+            const costElement = state.floatingWidget?.querySelector('.concept-cost-minimal-improved');
             if (costElement) {
                 costElement.textContent = 'Cost estimation failed';
             }
         }
+    }
+
+    static autoExtractSkeleton(selectedText) {
+        console.log('Word Munch: Auto-extracting skeleton for:', selectedText);
+        
+        // Send skeleton extraction request
+        const skeletonMessage = {
+            type: 'SKELETON_EXTRACTION',
+            text: selectedText,
+            url: window.location.href,
+            title: document.title,
+            timestamp: Date.now(),
+            messageId: Math.random().toString(36).substr(2, 9)
+        };
+        
+        try {
+            chrome.runtime.sendMessage(skeletonMessage, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error('Word Munch: Skeleton extraction failed:', chrome.runtime.lastError.message);
+                    this.handleSkeletonError('Connection failed');
+                    return;
+                }
+                
+                if (response?.received) {
+                    console.log('Word Munch: Skeleton extraction request sent successfully');
+                } else if (response?.error) {
+                    console.error('Word Munch: Skeleton extraction error:', response.error);
+                    this.handleSkeletonError(response.error);
+                }
+            });
+        } catch (error) {
+            console.error('Word Munch: Failed to send skeleton extraction request:', error);
+            this.handleSkeletonError('Failed to send request');
+        }
+    }
+
+    static handleSkeletonResult(skeletonData) {
+        console.log('Word Munch: Skeleton extraction result received:', skeletonData);
+        
+        const widget = state.floatingWidget;
+        if (!widget) return;
+        
+        const loadingEl = widget.querySelector('.concept-skeleton-loading');
+        const resultsEl = widget.querySelector('.concept-skeleton-results');
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (resultsEl) {
+            resultsEl.style.display = 'block';
+            resultsEl.innerHTML = this.generateSkeletonHTML(skeletonData);
+        }
+    }
+
+    static handleSkeletonError(error) {
+        console.error('Word Munch: Skeleton extraction error:', error);
+        
+        const widget = state.floatingWidget;
+        if (!widget) return;
+        
+        const loadingEl = widget.querySelector('.concept-skeleton-loading');
+        const resultsEl = widget.querySelector('.concept-skeleton-results');
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (resultsEl) {
+            resultsEl.style.display = 'block';
+            
+            // Provide more user-friendly error messages
+            let userFriendlyError = 'Unable to extract skeleton';
+            if (error.includes('403') || error.includes('Authentication')) {
+                userFriendlyError = 'Authentication issue - please check configuration';
+            } else if (error.includes('timeout') || error.includes('TIMEOUT')) {
+                userFriendlyError = 'Request timeout - please try again';
+            } else if (error.includes('Connection failed')) {
+                userFriendlyError = 'Connection failed - please check your internet';
+            }
+            
+            resultsEl.innerHTML = `
+                <div class="skeleton-error">
+                    <span class="skeleton-error-icon">⚠️</span>
+                    <span class="skeleton-error-text">${userFriendlyError}</span>
+                    <button class="skeleton-retry-btn" onclick="window.retrySkeletonExtraction()">
+                        🔄 Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    static generateSkeletonHTML(skeletonData) {
+        if (!skeletonData || !skeletonData.sentences || skeletonData.sentences.length === 0) {
+            return '<div class="skeleton-error">No skeleton data available</div>';
+        }
+        
+        const skeletonHTML = skeletonData.sentences.map(sentence => `
+            <div class="skeleton-sentence">
+                <div class="skeleton-simplified">
+                    <span class="skeleton-text skeleton-result">${ContentTemplates.escapeHtml(sentence.skeleton)}</span>
+                </div>
+            </div>
+        `).join('');
+        
+        return skeletonHTML;
     }
 
     static async startConceptAnalysis(originalText) {
@@ -2342,7 +2473,7 @@ class ConceptAnalyzer {
         const widget = state.floatingWidget;
         if (!widget) return;
         
-        const understandingInput = widget.querySelector('.concept-understanding-input-minimal');
+        const understandingInput = widget.querySelector('.concept-input-minimal');
         const analyzeBtn = widget.querySelector('.concept-analyze-btn-minimal');
         const loadingElement = widget.querySelector('.concept-loading-minimal');
         const resultsElement = widget.querySelector('.concept-results-minimal');
@@ -2361,6 +2492,7 @@ class ConceptAnalyzer {
             resultsElement.style.display = 'none';
             errorElement.style.display = 'none';
             
+            // Send concept analysis (skeleton is handled separately)
             this.sendConceptAnalysisMessage(originalText, userUnderstanding, null, false);
             
         } catch (error) {
@@ -2519,18 +2651,14 @@ class ConceptAnalyzer {
             }
         }
         
-        // Adjust score display color
-        let scoreColor = '#6366f1'; // Default blue
-        if (isEssentiallyCorrect) {
-            scoreColor = '#16a34a'; // Green for correct understanding
-        } else if (scorePercentage < 30) {
-            scoreColor = '#ef4444'; // Red for improvement needed
-        }
+        // Skeleton was already displayed in the skeleton section, so we don't need to display it again
+        // The skeleton section is handled separately in the auto-extraction process
+        let skeletonHTML = '';
         
-        // Full result HTML
+        // Full result HTML with neutral styling
         const resultsHTML = `
             <div class="concept-score-minimal">
-                <div class="score-circle" style="background: linear-gradient(135deg, ${scoreColor}, ${scoreColor}aa)">
+                <div class="score-circle">
                     <span class="score-number">${scorePercentage}%</span>
                 </div>
                 <div class="score-label">
@@ -2539,6 +2667,8 @@ class ConceptAnalyzer {
             </div>
             
             ${additionalFeedbackHTML}
+            
+            ${skeletonHTML}
             
             <div class="concept-suggestions-improved">
                 <div class="suggestions-header">
@@ -2573,6 +2703,27 @@ class ConceptAnalyzer {
         if (isEssentiallyCorrect) {
             console.log('Word Munch: Understanding is essentially correct, adjusting highlight emphasis');
         }
+    }
+
+    // Setup global retry function for skeleton extraction
+    static setupGlobalRetryFunction() {
+        window.retrySkeletonExtraction = () => {
+            console.log('Word Munch: Retrying skeleton extraction');
+            if (state.currentSelection && state.currentSelection.text) {
+                // Reset skeleton section to loading state
+                const widget = state.floatingWidget;
+                if (widget) {
+                    const loadingEl = widget.querySelector('.concept-skeleton-loading');
+                    const resultsEl = widget.querySelector('.concept-skeleton-results');
+                    
+                    if (loadingEl) loadingEl.style.display = 'flex';
+                    if (resultsEl) resultsEl.style.display = 'none';
+                }
+                
+                // Retry extraction
+                ConceptAnalyzer.autoExtractSkeleton(state.currentSelection.text);
+            }
+        };
     }
 }
 
@@ -3025,6 +3176,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     await loadConfig();
     await state.loadSettings();
     
+    // Setup global retry function for skeleton extraction
+    ConceptAnalyzer.setupGlobalRetryFunction();
+    
     APIManager.sendMessageToBackground({
         type: 'CONTENT_SCRIPT_READY',
         url: window.location.href
@@ -3039,6 +3193,9 @@ if (document.readyState !== 'loading') {
     setTimeout(async () => {
         await loadConfig();
         await state.loadSettings();
+        
+        // Setup global retry function for skeleton extraction
+        ConceptAnalyzer.setupGlobalRetryFunction();
         
         APIManager.sendMessageToBackground({
             type: 'CONTENT_SCRIPT_READY',

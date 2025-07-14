@@ -936,6 +936,30 @@ class MessageRouter {
                     }
                     return;
                 
+                case 'SKELETON_EXTRACTION':
+                    try {
+                        console.log('Service Worker: Processing skeleton extraction request');
+                        const skeletonResult = await APIManager.callSkeletonAPI(request.text);
+                        
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'SKELETON_EXTRACTION_RESULT',
+                                data: skeletonResult,
+                                requestId: request.requestId
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Service Worker: Skeleton extraction failed:', error);
+                        if (sender.tab?.id) {
+                            await chrome.tabs.sendMessage(sender.tab.id, {
+                                type: 'SKELETON_EXTRACTION_ERROR',
+                                error: error.message,
+                                requestId: request.requestId
+                            });
+                        }
+                    }
+                    return;
+                
                 default:
                     console.log('Service Worker: Unknown message type:', request.type);
             }
@@ -1078,7 +1102,7 @@ class WordProcessor {
 // === Concept analysis processor ===
 class ConceptProcessor {
     static async handleConceptAnalysis(request, sender) {
-        const { original_text, user_understanding, context, auto_extract_context, cache_key } = request;
+        const { original_text, user_understanding, context, auto_extract_context, extract_skeleton, cache_key } = request;
         
         try {
             const settings = await SettingsManager.getSettings();
@@ -1124,7 +1148,7 @@ class ConceptProcessor {
             console.log('Service Worker: Concept analysis direct call API');
             
             // Call API
-            const apiPromise = APIManager.callConceptAPI(original_text, user_understanding, context, auto_extract_context);
+            const apiPromise = APIManager.callConceptAPI(original_text, user_understanding, context, auto_extract_context, extract_skeleton);
             serviceState.activeRequests.set(requestKey, apiPromise);
             
             try {
@@ -1272,10 +1296,11 @@ class APIManager {
         }
     }
 
-    static async callConceptAPI(original_text, user_understanding, context, auto_extract_context) {
+    static async callConceptAPI(original_text, user_understanding, context, auto_extract_context, extract_skeleton = false) {
         console.log('Service Worker: Concept API call started');
         console.log('Original text length:', original_text?.length || 0);
         console.log('Understanding length:', user_understanding?.length || 0);
+        console.log('Extract skeleton:', extract_skeleton);
         
         // Check endpoint
         if (!CONFIG.CONCEPT_API_ENDPOINT) {
@@ -1292,7 +1317,8 @@ class APIManager {
             original_text: original_text,
             user_understanding: user_understanding,
             context: context,
-            auto_extract_context: auto_extract_context || false
+            auto_extract_context: auto_extract_context || false,
+            extract_skeleton: extract_skeleton || false
         };
         
         console.log('Concept request body keys:', Object.keys(requestBody));
@@ -1345,6 +1371,40 @@ class APIManager {
         } catch (fetchError) {
             console.log('Concept fetch error:', fetchError.message);
             throw fetchError;
+        }
+    }
+
+    static async callSkeletonAPI(text) {
+        console.log('Service Worker: Calling skeleton-only API for text:', text.substring(0, 50) + '...');
+        
+        try {
+            const requestData = {
+                original_text: text,
+                skeleton_only: true
+            };
+            
+            const response = await fetch(CONFIG.CONCEPT_API_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Skeleton API error: ${response.status} - ${errorText}`);
+            }
+            
+            const result = await response.json();
+            console.log('Service Worker: Skeleton-only response received');
+            
+            return result;
+            
+        } catch (error) {
+            console.error('Service Worker: Skeleton API call failed:', error);
+            throw error;
         }
     }
 }

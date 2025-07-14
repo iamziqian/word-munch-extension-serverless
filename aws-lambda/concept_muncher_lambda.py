@@ -158,6 +158,7 @@ class TextComprehensionAnalyzer:
             'embedding_original': 2592000,    # 30 days - Original text embeddings (highest value)
             'segments': 2592000,              # 30 days - Text segmentation results (high stability)
             'embedding_segment': 604800,      # 7 days - Segment embeddings (medium value)
+            'sentence_skeleton': 1209600,     # 14 days - Sentence skeleton extraction (medium-high value)
         }
     
     def _get_bedrock_client(self):
@@ -553,6 +554,7 @@ Return JSON with:
     def analyze_comprehension(self, original_text: str, user_understanding: str, context: str = None, auto_extract_context: bool = False) -> Dict[str, Any]:
         """
         Optimized understanding analysis - smarter Claude trigger logic
+        Skeleton extraction is handled separately via skeleton-only API
         """
         logger.info("Starting comprehension analysis...")
         
@@ -568,11 +570,13 @@ Return JSON with:
         segments = self.segment_text(original_text)
         logger.info(f"Segmented into {len(segments)} parts")
         
-        # 2. User understanding embeddings (no cache - personalized content)
+        # Note: Skeleton extraction is now handled separately via skeleton-only API
+        
+        # 3. User understanding embeddings (no cache - personalized content)
         enhanced_user_text = self._enhance_user_understanding(user_understanding, context)
         user_embedding = self.get_text_embedding(enhanced_user_text, cache_type='no_cache')
         
-        # 3. Calculate segment similarities
+        # 4. Calculate segment similarities
         segment_similarities = []
         for i, segment in enumerate(segments):
             # Cache strategy decision:
@@ -600,10 +604,10 @@ Return JSON with:
             
             logger.info(f"Segment {i+1}: similarity={similarity:.3f}, level={level}")
         
-        # 4. Calculate overall similarity
+        # 5. Calculate overall similarity
         overall_similarity = sum(s['similarity'] for s in segment_similarities) / len(segment_similarities)
         
-        # 5. Smartly determine if Claude detailed feedback is needed
+        # 6. Smartly determine if Claude detailed feedback is needed
         needs_claude_feedback = self._should_trigger_claude_feedback(
             overall_similarity, 
             segment_similarities, 
@@ -611,7 +615,7 @@ Return JSON with:
             original_text
         )
         
-        # 6. Generate suggestions
+        # 7. Generate suggestions
         suggestions = self._generate_smart_suggestions(segment_similarities, overall_similarity)
         
         logger.info(f"Analysis complete. Overall similarity: {overall_similarity:.3f}, Needs Claude: {needs_claude_feedback}")
@@ -814,6 +818,269 @@ Return JSON with:
                 "bloom_taxonomy": "understand"
             }
 
+    def extract_sentence_skeleton(self, text: str) -> Dict[str, Any]:
+        """
+        Simplified sentence skeleton extraction - just simplify sentences by removing modifiers
+        Use Nova Micro for cost-effective sentence simplification
+        Cache strategy: Medium-high value cache, 14-day TTL
+        """
+        cache_key = self.get_cache_key('sentence_skeleton', text)
+        
+        # Try cache read
+        cached_skeleton = self.get_cached_data(cache_key)
+        if cached_skeleton:
+            return cached_skeleton
+        
+        # Use Amazon Nova Micro for sentence simplification (faster and more cost-effective)
+        try:
+            bedrock = self._get_bedrock_client()
+            
+            # Simplified prompt - focus only on sentence simplification
+            user_prompt = f"""Simplify the following text by removing unnecessary words while keeping the core meaning:
+
+Original text: {text}
+
+RULES:
+1. Remove adjectives, adverbs, and unnecessary modifiers
+2. Keep the main action and key nouns
+3. Make sentences shorter and clearer
+4. Preserve the original meaning
+
+EXAMPLES:
+"The students are studying very hard for their upcoming final exams" → "Students are studying for exams"
+"She quickly finished all of her homework assignments" → "She finished homework"  
+"The important meeting will definitely start soon" → "Meeting will start soon"
+
+Return ONLY valid JSON, no markdown:
+
+{{
+  "sentences": [
+    {{
+      "original": "original sentence text",
+      "skeleton": "simplified sentence"
+    }}
+  ]
+}}"""
+
+            response = bedrock.converse(
+                modelId="amazon.nova-micro-v1:0",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "text": user_prompt
+                            }
+                        ]
+                    }
+                ],
+                inferenceConfig={
+                    "maxTokens": 400,
+                    "temperature": 0.1
+                }
+            )
+            
+            # Parse Converse API response format
+            if 'output' in response and 'message' in response['output']:
+                message_content = response['output']['message']['content']
+                if message_content and len(message_content) > 0:
+                    nova_response = message_content[0].get('text', '')
+                else:
+                    nova_response = ""
+            else:
+                logger.warning(f"Unexpected Nova Micro response format: {list(response.keys())}")
+                nova_response = str(response)
+            
+            # Clean the response - remove markdown formatting and extra whitespace
+            cleaned_response = self._clean_nova_response(nova_response)
+            
+            try:
+                skeleton_data = json.loads(cleaned_response)
+                
+                # Simple processing - just validate basic structure
+                result = self._process_simplified_skeleton(skeleton_data, text)
+                
+                # Cache the result
+                self.set_cached_data(cache_key, result, 'sentence_skeleton')
+                
+                logger.info(f"Sentence skeleton extraction completed: {len(result.get('sentences', []))} sentences")
+                return result
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse Nova Micro skeleton response: {e}")
+                logger.warning(f"Raw response: {nova_response[:300]}...")
+                logger.warning(f"Cleaned response: {cleaned_response[:300]}...")
+                
+                # Try to recover partial data from truncated response
+                partial_result = self._try_simple_recovery(cleaned_response, text)
+                if partial_result:
+                    logger.info("Successfully recovered partial skeleton data")
+                    return partial_result
+                
+                logger.warning("No partial recovery possible, using fallback skeleton")
+                return self._create_simple_fallback_skeleton(text)
+                
+        except Exception as e:
+            logger.error(f"Skeleton extraction error: {e}")
+            return self._create_simple_fallback_skeleton(text)
+    
+    def _clean_nova_response(self, response: str) -> str:
+        """
+        Clean Nova Micro response by removing markdown formatting and extra content
+        """
+        if not response:
+            return ""
+        
+        # Remove markdown code block markers
+        cleaned = response.strip()
+        
+        # Remove ```json and ``` markers
+        if cleaned.startswith('```json'):
+            cleaned = cleaned[7:]  # Remove ```json
+        elif cleaned.startswith('```'):
+            cleaned = cleaned[3:]   # Remove ```
+        
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:-3]  # Remove trailing ```
+        
+        # Remove any leading/trailing whitespace
+        cleaned = cleaned.strip()
+        
+        # Try to extract valid JSON if there's extra text
+        # Look for { at the beginning of a line and } at the end
+        import re
+        json_match = re.search(r'^\s*(\{.*\})\s*$', cleaned, re.DOTALL)
+        if json_match:
+            cleaned = json_match.group(1)
+        
+        return cleaned
+    
+    def _try_simple_recovery(self, response: str, original_text: str) -> Dict[str, Any]:
+        """
+        Try to recover simple skeleton data from truncated/malformed response
+        """
+        try:
+            import re
+            
+            # Try to find sentences array even if JSON is incomplete
+            sentences_match = re.search(r'"sentences"\s*:\s*\[(.*)', response, re.DOTALL)
+            if not sentences_match:
+                return None
+            
+            sentences_content = sentences_match.group(1)
+            
+            # Try to extract individual sentence objects (simplified)
+            sentence_objects = []
+            
+            # Look for complete sentence objects
+            sentence_pattern = r'\{\s*"original"\s*:\s*"([^"]*)",\s*"skeleton"\s*:\s*"([^"]*)"[^}]*\}'
+            matches = re.findall(sentence_pattern, sentences_content)
+            
+            for original, skeleton in matches:
+                if original and skeleton:
+                    sentence_objects.append({
+                        'original': original,
+                        'skeleton': skeleton,
+                        'complexity_reduced': len(skeleton) < len(original)
+                    })
+            
+            if sentence_objects:
+                logger.info(f"Recovered {len(sentence_objects)} sentences from partial response")
+                return {
+                    'original_text': original_text,
+                    'sentences': sentence_objects,
+                    'total_sentences': len(sentence_objects),
+                    'partial_recovery': True
+                }
+                
+        except Exception as e:
+            logger.warning(f"Simple recovery failed: {e}")
+        
+        return None
+    
+    def _process_simplified_skeleton(self, skeleton_data: Dict, original_text: str) -> Dict[str, Any]:
+        """Simple skeleton data processing - just validate and clean"""
+        
+        # Ensure basic structure exists
+        if 'sentences' not in skeleton_data:
+            skeleton_data['sentences'] = []
+        
+        # Simple processing for each sentence
+        processed_sentences = []
+        for sentence_data in skeleton_data.get('sentences', []):
+            original = sentence_data.get('original', '').strip()
+            skeleton = sentence_data.get('skeleton', '').strip()
+            
+            # Basic validation
+            if not skeleton:
+                skeleton = original  # Use original if no skeleton provided
+            
+            processed_sentence = {
+                'original': original,
+                'skeleton': skeleton,
+                'complexity_reduced': len(skeleton) < len(original) and len(skeleton) > 0
+            }
+            processed_sentences.append(processed_sentence)
+        
+        return {
+            'original_text': original_text,
+            'sentences': processed_sentences,
+            'total_sentences': len(processed_sentences)
+        }
+    
+    def _create_simple_fallback_skeleton(self, text: str) -> Dict[str, Any]:
+        """Create simple fallback skeleton data when Nova Micro fails"""
+        
+        # Simple fallback: split by sentences and apply basic simplification
+        sentences = re.split(r'[.!?。！？]', text)
+        sentence_data = []
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if sentence:
+                # Basic simplification: remove common filler words
+                simplified = self._basic_simplify(sentence)
+                
+                sentence_data.append({
+                    'original': sentence,
+                    'skeleton': simplified,
+                    'complexity_reduced': len(simplified) < len(sentence)
+                })
+        
+        return {
+            'original_text': text,
+            'sentences': sentence_data,
+            'total_sentences': len(sentence_data),
+            'fallback_used': True
+        }
+    
+    def _basic_simplify(self, sentence: str) -> str:
+        """Apply basic text simplification rules"""
+        
+        # Remove common filler words and phrases
+        filler_words = [
+            'very', 'really', 'quite', 'extremely', 'incredibly', 'absolutely',
+            'definitely', 'certainly', 'obviously', 'clearly', 'actually',
+            'basically', 'essentially', 'literally', 'seriously'
+        ]
+        
+        words = sentence.split()
+        simplified_words = []
+        
+        for word in words:
+            # Remove filler words (case insensitive)
+            clean_word = word.lower().rstrip('.,!?')
+            if clean_word not in filler_words:
+                simplified_words.append(word)
+        
+        simplified = ' '.join(simplified_words)
+        
+        # If we removed too much, return original
+        if len(simplified.split()) < 2:
+            return sentence
+        
+        return simplified
+
 def lambda_handler(event, context):
     """
     Concept Muncher Lambda Handler with Warm-up Support
@@ -850,24 +1117,71 @@ def lambda_handler(event, context):
             body = event.get('body', {})
         
         original_text = body.get('original_text', '')
-        user_understanding = body.get('user_understanding', '')
-        context = body.get('context', '')
-        auto_extract_context = body.get('auto_extract_context', False)
+        skeleton_only = body.get('skeleton_only', False)
         
-        # Basic required fields validation
-        if not original_text or not user_understanding:
-            return {
-                'statusCode': 400,
-                'headers': {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                'body': json.dumps({
-                    'error': 'Missing required fields: original_text and user_understanding'
-                })
-            }
+        # Handle skeleton-only requests
+        if skeleton_only:
+            if not original_text:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'error': 'Missing required field: original_text'
+                    })
+                }
+        else:
+            # For full concept analysis
+            user_understanding = body.get('user_understanding', '')
+            context = body.get('context', '')
+            auto_extract_context = body.get('auto_extract_context', False)
+            
+            if not original_text or not user_understanding:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'error': 'Missing required fields: original_text and user_understanding'
+                    })
+                }
         
-        # Check anonymous user rate limiting
+        # Handle skeleton-only requests first (no rate limiting for lightweight skeleton extraction)
+        if skeleton_only:
+            logger.info('Processing skeleton-only request (no rate limiting)')
+            
+            try:
+                # Initialize analyzer for skeleton extraction only
+                analyzer = TextComprehensionAnalyzer()
+                skeleton_result = analyzer.extract_sentence_skeleton(original_text)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps(skeleton_result, ensure_ascii=False)
+                }
+            except Exception as e:
+                logger.error(f"Skeleton extraction failed: {e}")
+                return {
+                    'statusCode': 500,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({
+                        'error': 'Skeleton extraction failed',
+                        'message': str(e)
+                    })
+                }
+        
+        # For full concept analysis - apply rate limiting
         user_id = extract_user_id_from_event(event)
         is_anonymous = is_anonymous_user(event)
         
