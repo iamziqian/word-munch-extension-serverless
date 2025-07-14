@@ -22,31 +22,34 @@ Word Munch fixes this: **AI handles information retrieval while your mind focuse
 
 ## What it does
 
-Transform any webpage into an intelligent reading companion with **five AI-powered features:**
+### 🤖 **Word Munch Handles Information Retrieval and Digestion** 
 
-### 🧠 **The Five Smart Reading Tools**
+Word Munch finds the right information and transforms it into digestible form—so you can focus on understanding and high-level thinking.
 
-- **Word Muncher:** Click unknown word → get simplified synonyms
-- **Concept Muncher:** Write understanding → get instant feedback  
-- **Semantic Search:** Ask questions → find answers by meaning
-- **Chunk Reading:** Long articles → bite-sized pieces
-- **Cognitive Profile:** Track reading patterns and learning style
+**Five AI-Powered Features:**
+- **Semantic Search** *(Titan v2)*: Ask questions → locate precise answers by meaning, not keywords
+- **Chunk Reading** *(Frontend)*: Long articles → bite-sized digestible pieces 
+- **Word Muncher** *(Nova Micro)*: Click unknown word → get simplified synonyms
+- **Concept Muncher** *(Titan v2 + Claude)*: Write your understanding → get instant feedback + simplified sentence structure
+- **Cognitive Profile** *(DynamoDB)*: Track reading patterns and learning style
 
-### 🎯 **Why Word Munch Wins**
+**You handle the thinking:** Connect concepts, form insights, build mental models—without getting stuck on vocabulary or information hunting.
 
-| Challenge | Traditional | AI Tools | Word Munch | Result |
-|-----------|-------------|----------|------------|---------|
-| **Unknown words** | Copy → Google | Complex explanations | Click → Simple synonyms | 📈 **Build on existing knowledge** |
-| **Complex concepts** | Copy → ChatGPT | AI explains for you | You explain → Get feedback | 📈 **Active thinking** |
-| **Finding info** | Ctrl+F → Miss content | AI scans doc and answers questions | Ask questions → Locate answers | 📈 **Deeper understanding** |
-| **Long articles** | Read all → Overload | AI creates summary | One-click chunking | 📈 **Manageable pace** |
+### 🎯 **Why This Division of Labor Works**
 
-**Key Differentiator:** Makes you smarter, not lazier—AI enhances your brain instead of replacing it.
+| Cognitive Task | Traditional Reading | AI-Only Tools | Word Munch Division | Result |
+|----------------|-------------------|---------------|-------------------|---------|
+| **Unknown words** | Stop, search, lose flow | AI explains, you stay passive | AI simplifies → You connect | 📈 **Knowledge bridges** |
+| **Complex concepts** | Re-read, get confused | AI thinks for you | You think → AI gives feedback + simplified sentence structure | 📈 **Active learning** |
+| **Finding info** | Ctrl+F, miss context | AI scans doc and answers | You ask questions → AI locates answers → You analyze | 📈 **Deep comprehension** |
+| **Long articles** | Overwhelm or quit | AI summarizes, you miss nuance | AI chunks → You digest | 📈 **Sustained focus** |
+
+**Key Innovation:** Perfect cognitive division of labor—AI handles information retrieval and simplification, you handle information understanding and analysis.
 
 ### The Science
-**Cognitive Load Theory:** 70% of reading energy wasted on basic processing.
+**Cognitive Load Theory:** 70% of reading energy wasted on mechanical processing tasks.
 
-The fix: Systematic cognitive offloading—vocabulary, comprehension verification, information retrieval, environment optimization.
+**Word Munch's fix**: Systematic cognitive offloading of low-level tasks (vocabulary lookup, sentence parsing, information location, content chunking) so 95% of your mental resources go to actual understanding and insight generation.
 
 **Result:** 95% mental resources for actual thinking.
 
@@ -77,7 +80,7 @@ Chrome Extension → API Gateway → 5 Lambda Functions → DynamoDB + Cache
 | Function | Model | Memory | Lines | Purpose |
 |----------|-------|--------|-------|---------|
 | **Word Muncher** | Nova Micro | 512MB | 658 | Simplify context-aware synonyms |
-| **Concept Muncher** | Titan v2 + Claude | 1024MB | 1,274 | Comprehension gap analysis |
+| **Concept Muncher** | Titan v2 + Claude | 1024MB | 1,274 | Comprehension gap analysis + simplified sentence structure |
 | **Semantic Search** | Titan v2 | 1024MB | 568 | Document semantic search |
 | **Cognitive Profile** | Analytics | 1024MB | 1,217 | Learning patterns |
 | **User Auth** | JWT | 512MB | 551 | Security |
