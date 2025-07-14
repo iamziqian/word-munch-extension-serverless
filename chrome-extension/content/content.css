@@ -996,9 +996,72 @@
     color: var(--wm-text-primary);
 }
 
+/* Keep original formatting */
+#word-munch-reader-container .reader-content p {
+    margin-bottom: 1.5em;
+    margin-top: 0;
+}
+
+#word-munch-reader-container .reader-content div {
+    margin-bottom: 1em;
+}
+
+#word-munch-reader-container .reader-content h1,
+#word-munch-reader-container .reader-content h2,
+#word-munch-reader-container .reader-content h3,
+#word-munch-reader-container .reader-content h4,
+#word-munch-reader-container .reader-content h5,
+#word-munch-reader-container .reader-content h6 {
+    margin-top: 2em;
+    margin-bottom: 1em;
+}
+
+#word-munch-reader-container .reader-content h1:first-child,
+#word-munch-reader-container .reader-content h2:first-child,
+#word-munch-reader-container .reader-content h3:first-child {
+    margin-top: 0;
+}
+
+#word-munch-reader-container .reader-content ul,
+#word-munch-reader-container .reader-content ol {
+    margin-bottom: 1.5em;
+    padding-left: 2em;
+}
+
+#word-munch-reader-container .reader-content li {
+    margin-bottom: 0.5em;
+}
+
+#word-munch-reader-container .reader-content blockquote {
+    margin: 1.5em 0;
+    padding: 1em 1.5em;
+    border-left: 4px solid #e2e8f0;
+    background: rgba(248, 250, 252, 0.5);
+}
+
 /* Segmented mode styles */
 #word-munch-reader-container .reader-content.chunked-mode {
     padding: 20px 40px;
+}
+
+/* In chunk mode, only the original article paragraph spacing is applied to non-chunk elements. */
+#word-munch-reader-container .reader-content.chunked-mode p:not(.chunk-text) {
+    margin-bottom: 1.5em;
+    margin-top: 0;
+}
+
+#word-munch-reader-container .reader-content.chunked-mode div:not(.text-chunk):not(.chunk-text) {
+    margin-bottom: 1em;
+}
+
+#word-munch-reader-container .reader-content.chunked-mode h1:not(.chunk-text),
+#word-munch-reader-container .reader-content.chunked-mode h2:not(.chunk-text),
+#word-munch-reader-container .reader-content.chunked-mode h3:not(.chunk-text),
+#word-munch-reader-container .reader-content.chunked-mode h4:not(.chunk-text),
+#word-munch-reader-container .reader-content.chunked-mode h5:not(.chunk-text),
+#word-munch-reader-container .reader-content.chunked-mode h6:not(.chunk-text) {
+    margin-top: 2em;
+    margin-bottom: 1em;
 }
 
 #word-munch-reader-container .text-chunk {
