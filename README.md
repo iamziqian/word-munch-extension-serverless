@@ -9,7 +9,7 @@
     <img src="https://img.shields.io/chrome-web-store/v/kkcmcbpndfgiainfpocpoajlhalpiodl?label=📥%20Install%20Now&color=4285f4&style=for-the-badge" alt="Install from Chrome Web Store"/>
   </a>
   
-  <a href="https://youtu.be/1pjkhEv0V94">
+  <a href="https://youtu.be/UrfpC8I-Gtk">
     <img src="https://img.shields.io/badge/🎬%20Watch%20Demo-FF6B6B?style=for-the-badge" alt="Watch Demo"/>
   </a>
   
