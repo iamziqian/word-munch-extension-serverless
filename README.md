@@ -3,8 +3,6 @@
   
   # Smart Reading Assistant - Word Munch
   
-  **Read smarter, not harder**
-  
   <a href="https://chromewebstore.google.com/detail/word-munch/kkcmcbpndfgiainfpocpoajlhalpiodl">
     <img src="https://img.shields.io/badge/📥%20Install%20from%20Chrome%20Web%20Store-4285f4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Install from Chrome Web Store"/>
   </a>
@@ -13,7 +11,7 @@
     <img src="https://img.shields.io/badge/🎬%20Watch%20Demo-FF6B6B?style=for-the-badge" alt="Watch Demo"/>
   </a>
   
-  *• Click • Retrieve • Simplify • Digest*
+  *• Click • Retrieve • Digest*
 </div>
 
 ## Inspiration
