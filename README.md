@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/word_muncher_logo.png" alt="Word Munch Logo" width="100"/>
   
-  # Word Munch
+  # Smart Reading Assistant - Word Munch
   
   **Read smarter, not harder**
   
@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/badge/🎬%20Watch%20Demo-FF6B6B?style=for-the-badge" alt="Watch Demo"/>
   </a>
   
-  *• Click • Retrieve • Simplify • Understand*
+  *• Click • Retrieve • Simplify • Digest*
 </div>
 
 ## Inspiration
