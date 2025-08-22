@@ -69,55 +69,6 @@ Word Munch finds the right information and transforms it into digestible form—
 
 ---
 
-## Privacy & Security
-
-### 🔐 **Privacy-First Architecture**
-
-**Core Principle:** Your reading data stays yours. Word Munch processes content locally and transmits only minimal, anonymized data for AI processing.
-
-### **Data Protection Framework**
-
-| Security Layer | Implementation | Compliance | Metrics |
-|----------------|---------------|------------|---------|
-| **Sensitive Data Blocking** | JavaScript/DOM parsing blocks SSN, birthdates, financial data | GDPR/CCPA/COPPA | **99.7%** PII prevention |
-| **Privacy Dashboard** | React-based visual threat indicators with one-click controls | User transparency | **73%** confidence improvement |
-| **Threat Detection API** | Python/FastAPI on Lambda maps threats to regulations | Multi-jurisdiction | **<200ms** response time |
-| **Anonymous Rate Limiting** | DynamoDB fingerprinting beyond IP addresses | Anti-abuse | **<0.1%** false positives |
-
-### **Privacy Controls**
-
-**Built-in Protection:**
-- **Local Processing First** - Text chunking and basic analysis happen in your browser
-- **Minimal Data Transmission** - Only selected words/phrases sent to AI models
-- **Auto-Purging PII** - Automatic deletion of personally identifiable information
-- **No Cross-Site Tracking** - Extension operates only on pages you actively use it on
-
-**User Dashboard Features:**
-- **Real-time Privacy Monitoring** - Visual indicators for data exposure risks
-- **One-Click Blocking** - Instant controls for sensitive content detection
-- **Reading Pattern Analytics** - Local storage with user-controlled cloud sync
-- **Data Export/Deletion** - Full control over cognitive profile data
-
-### **Compliance & Security**
-
-**Regulatory Alignment:**
-- **GDPR** - Right to erasure, data portability, consent management
-- **CCPA** - California privacy rights with opt-out controls  
-- **COPPA** - Enhanced protections for users under 13
-
-**Technical Security:**
-- **Request Fingerprinting** - Advanced abuse detection beyond IP filtering
-- **JWT Authentication** - Secure session management without storing credentials
-- **Encrypted Transit** - All API communications use TLS 1.3
-- **Rate Limiting** - **99.7%** abuse prevention across **10K+** daily requests
-
-**Threat Detection:**
-- **Sub-200ms** threat classification using AWS Lambda
-- **94% cost reduction** during traffic spikes through intelligent caching
-- **Automated compliance mapping** for evolving privacy regulations
-
----
-
 ## How I built it
 
 ### Architecture Overview
